@@ -1,0 +1,1696 @@
+diff --git a/index.html b/index.html
+index 514048d06604d777770e6783cbf1fa6107fea0ea..7afc9042fb57f05154af29a7d333e6cf011c4389 100644
+--- a/index.html
++++ b/index.html
+@@ -1,164 +1,392 @@
+ <!doctype html>
+ <html lang="ja">
+ <head>
+ <meta charset="utf-8" />
+ <meta name="viewport" content="width=device-width,initial-scale=1" />
+-<title>Wireframe City Shooter</title>
++<title>StarDogs</title>
+ <style>
+   :root {
+     color-scheme: dark;
+   }
+   html, body {
+     height: 100%;
+     margin: 0;
+     background: radial-gradient(circle at 50% 35%, #001636 0%, #02060d 60%, #01030a 100%);
+     font-family: "Helvetica Neue", system-ui, sans-serif;
+     color: #cbe7ff;
+   }
+   #hud {
+     position: fixed;
+     top: 16px;
+     left: 16px;
+     font-size: 13px;
+     letter-spacing: 0.08em;
+     text-transform: uppercase;
+     opacity: 0.85;
+     pointer-events: none;
+   }
+   canvas {
+     display: block;
+     width: 100vw;
+     height: 100vh;
+   }
++  #title-screen {
++    position: fixed;
++    inset: 0;
++    display: flex;
++    align-items: center;
++    justify-content: center;
++    background: radial-gradient(circle at 50% 40%, rgba(0, 20, 60, 0.92), rgba(0, 4, 12, 0.95));
++    z-index: 20;
++    transition: opacity 0.5s ease;
++  }
++  #title-screen.hidden {
++    opacity: 0;
++    pointer-events: none;
++  }
++  .title-card {
++    text-align: center;
++    padding: 40px 48px;
++    border-radius: 18px;
++    background: rgba(0, 10, 24, 0.72);
++    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
++    border: 1px solid rgba(0, 123, 255, 0.55);
++    max-width: 440px;
++    width: calc(100% - 48px);
++    transition: transform 0.45s ease, opacity 0.45s ease;
++  }
++  .title-card h1 {
++    margin: 0 0 18px;
++    font-size: clamp(42px, 6vw, 68px);
++    letter-spacing: 0.12em;
++    text-transform: uppercase;
++    color: #7fd3ff;
++    text-shadow: 0 0 18px rgba(0, 123, 255, 0.7);
++  }
++  .title-card p {
++    margin: 0 0 28px;
++    font-size: clamp(16px, 2.6vw, 20px);
++    letter-spacing: 0.08em;
++    color: #cbe7ff;
++    opacity: 0.82;
++  }
++  .title-actions {
++    display: flex;
++    gap: 16px;
++    justify-content: center;
++    flex-wrap: wrap;
++  }
++  .title-actions button {
++    padding: 12px 24px;
++    border-radius: 999px;
++    font-size: 15px;
++    letter-spacing: 0.08em;
++    text-transform: uppercase;
++    cursor: pointer;
++    border: none;
++    background: linear-gradient(135deg, #0a5cff, #009dff);
++    color: #f8fbff;
++    text-decoration: none;
++    box-shadow: 0 10px 24px rgba(0, 123, 255, 0.4);
++    transition: transform 0.2s ease, box-shadow 0.2s ease;
++  }
++  .title-actions button:hover {
++    transform: translateY(-2px);
++    box-shadow: 0 14px 30px rgba(0, 123, 255, 0.55);
++  }
++  .title-actions button:focus-visible {
++    outline: 2px solid rgba(0, 180, 255, 0.8);
++    outline-offset: 4px;
++  }
++  #title-screen.hidden .title-card {
++    transform: translateY(-16px);
++    opacity: 0;
++  }
+ </style>
+ </head>
+ <body>
+ <canvas id="view" width="1280" height="720"></canvas>
+ <div id="hud">CITY RUN / WIREFRAME MODE</div>
++<div id="title-screen">
++  <div class="title-card">
++    <h1>StarDogs</h1>
++    <p>Press Space / Click to launch</p>
++    <div class="title-actions">
++      <button id="start-button" type="button">Game Start</button>
++      <button id="tweet-button" type="button">Tweet #KGNINJA #StarDogs</button>
++    </div>
++  </div>
++</div>
+ <script>
+ (() => {
+   "use strict";
+   const canvas = document.getElementById("view");
+   const ctx = canvas.getContext("2d", { alpha: false });
+   const hudLabel = document.getElementById("hud");
++  const titleScreen = document.getElementById("title-screen");
++  const startButton = document.getElementById("start-button");
++  const tweetButton = document.getElementById("tweet-button");
++  tweetButton.setAttribute("aria-label", "#KGNINJA #StarDogs でTweet");
++  tweetButton.addEventListener("click", () => {
++    // ユーザーが指定ハッシュタグ付きでTweetできるようにintent URLを生成
++    const tweetIntent = new URL("https://twitter.com/intent/tweet");
++    tweetIntent.searchParams.set("text", "#KGNINJA #StarDogs");
++    if (window.location.protocol.startsWith("http")) {
++      // プレイ中のURLが共有可能なときはTweetに付与
++      tweetIntent.searchParams.set("url", window.location.href);
++    }
++    window.open(tweetIntent.toString(), "_blank", "noopener");
++  });
++
++  // タイトル表示時はアクセシビリティ用属性を更新
++  titleScreen.setAttribute("aria-hidden", "false");
+ 
+   // === 表示設定 ===
+   const display = {
+     fov: 1.2,          // 遠近感の強さ
+     zNear: 1.0,        // ニアクリップ
+     zFar: 4000.0,      // ファークリップ
+     filmHeight: 1.0,   // 正規化されたフィルムサイズ
+   };
+ 
+   // === 入力状態 ===
+   const keys = new Set();
++
++  // === オーディオシステム構築（ユーザー操作後に初期化） ===
++  const audioSystem = (() => {
++    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
++    let ctx = null;
++    let noiseBuffer = null;
++
++    // 乱数ノイズのバッファを生成して爆発音の素材とする
++    const getNoiseBuffer = (context) => {
++      if (noiseBuffer) return noiseBuffer;
++      const duration = 1.2;
++      const buffer = context.createBuffer(1, Math.floor(context.sampleRate * duration), context.sampleRate);
++      const data = buffer.getChannelData(0);
++      for (let i = 0; i < data.length; i++) {
++        data[i] = Math.random() * 2 - 1;
++      }
++      noiseBuffer = buffer;
++      return noiseBuffer;
++    };
++
++    // コンテキストを確保し、必要に応じて再開する
++    const withContext = (fn) => {
++      if (!AudioContextClass) return;
++      if (!ctx) {
++        ctx = new AudioContextClass();
++      }
++      if (ctx.state === "suspended") {
++        ctx.resume();
++      }
++      fn(ctx);
++    };
++
++    return {
++      resume() {
++        if (!AudioContextClass) return;
++        if (!ctx) {
++          ctx = new AudioContextClass();
++        }
++        if (ctx.state === "suspended") {
++          ctx.resume();
++        }
++      },
++      playLaserShot() {
++        withContext((context) => {
++          const now = context.currentTime;
++          const gain = context.createGain();
++          gain.gain.setValueAtTime(0.22, now);
++          gain.gain.exponentialRampToValueAtTime(0.002, now + 0.16);
++
++          const osc = context.createOscillator();
++          osc.type = "sawtooth";
++          osc.frequency.setValueAtTime(880, now);
++          osc.frequency.exponentialRampToValueAtTime(1660, now + 0.12);
++
++          osc.connect(gain).connect(context.destination);
++          osc.start(now);
++          osc.stop(now + 0.18);
++        });
++      },
++      playExplosion(intensity = 1) {
++        withContext((context) => {
++          const now = context.currentTime;
++          const source = context.createBufferSource();
++          source.buffer = getNoiseBuffer(context);
++
++          const filter = context.createBiquadFilter();
++          filter.type = "lowpass";
++          const cutoff = 600 + Math.min(intensity, 4) * 420;
++          filter.frequency.setValueAtTime(cutoff, now);
++          filter.Q.setValueAtTime(0.8, now);
++
++          const gain = context.createGain();
++          const startGain = 0.32 * Math.min(intensity, 3.5);
++          gain.gain.setValueAtTime(startGain, now);
++          gain.gain.exponentialRampToValueAtTime(0.002, now + 0.9);
++
++          source.connect(filter).connect(gain).connect(context.destination);
++          source.start(now);
++          source.stop(now + 1.0);
++        });
++      },
++      playWaveCannon() {
++        withContext((context) => {
++          const now = context.currentTime;
++          const duration = 1.8;
++
++          const bassOsc = context.createOscillator();
++          bassOsc.type = "square";
++          bassOsc.frequency.setValueAtTime(110, now);
++          bassOsc.frequency.exponentialRampToValueAtTime(260, now + 0.9);
++
++          const bassGain = context.createGain();
++          bassGain.gain.setValueAtTime(0.3, now);
++          bassGain.gain.linearRampToValueAtTime(0.0, now + duration);
++
++          const airSource = context.createBufferSource();
++          airSource.buffer = getNoiseBuffer(context);
++
++          const bandPass = context.createBiquadFilter();
++          bandPass.type = "bandpass";
++          bandPass.frequency.setValueAtTime(900, now);
++          bandPass.Q.setValueAtTime(1.6, now);
++
++          const airGain = context.createGain();
++          airGain.gain.setValueAtTime(0.26, now);
++          airGain.gain.linearRampToValueAtTime(0.0, now + duration);
++
++          bassOsc.connect(bassGain).connect(context.destination);
++          airSource.connect(bandPass).connect(airGain).connect(context.destination);
++
++          bassOsc.start(now);
++          bassOsc.stop(now + duration);
++          airSource.start(now);
++          airSource.stop(now + duration);
++        });
++      },
++    };
++  })();
+   window.addEventListener("keydown", (ev) => {
+     if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space", "KeyW", "KeyA", "KeyS", "KeyD"].includes(ev.code)) {
+       ev.preventDefault();
+     }
++    audioSystem.resume(); // キー操作でオーディオコンテキストを解放
++    if (gamePhase === "title" && !ev.repeat && (ev.code === "Space" || ev.code === "Enter")) {
++      startFromTitle(); // タイトル画面からゲーム開始
++      return;
++    }
+     keys.add(ev.code);
+     if (!ev.repeat && ev.code === "KeyF") {
+       missileRequest = true; // ミサイルは単発入力で発射要求
+     }
+   }, { passive: false });
+   window.addEventListener("keyup", (ev) => keys.delete(ev.code));
++  window.addEventListener("pointerdown", () => audioSystem.resume(), { passive: true });
++  window.addEventListener("touchstart", () => audioSystem.resume(), { passive: true });
+ 
+   // === ベクトル演算ユーティリティ ===
+   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+ 
+   // === イージング関数 ===
+   const easeInOutCubic = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t < 0.5
+     ? 4 * t * t * t
+     : 1 - Math.pow(-2 * t + 2, 3) * 0.5);
+   const easeOutCubic = (t) => (t <= 0 ? 0 : 1 - Math.pow(1 - clamp(t, 0, 1), 3));
+   const smoothstep = (t) => {
+     const k = clamp(t, 0, 1);
+     return k * k * (3 - 2 * k);
+   };
+ 
+   // === 自機ステート ===
+   const player = {
+     pos: { x: 0, y: 10, z: 40 }, // 後方から自機を見るためZを正にスタート
+     vel: { x: 0, y: 0 },
+     speedForward: 80,   // 高速感を保ちつつステージを長く感じさせるため速度を抑制
+     roll: 0,
+     maxHp: 120,
+     hp: 120,
+     maxShield: 60,
+     shield: 60,
+     maxStocks: 3,
+     stocks: 3,
+     invuln: 0,
+     hitRadius: 6,
++    visible: true, // ゲームオーバー時に自機を非表示にするためのフラグ
+   };
+ 
+   const camera = {
+     pos: { x: 0, y: 18, z: 80 },
+     targetOffset: { x: 0, y: -4, z: -40 },
+     shake: 0,
+   };
+ 
+   // === シーンジオメトリ格納 ===
+   const cityObjects = [];
+   // === 敵オブジェクト格納 ===
+   const enemyObjects = [];
+   let simTime = 0; // シミュレーション経過時間（敵挙動の位相計算用）
+   // === 投射物（プレイヤー・ミサイル・敵ショット）格納 ===
+   const playerShots = [];
+   const playerMissiles = [];
+   const enemyShots = [];
+   const explosions = [];
++  const shieldPickups = [];
+   let shotCooldown = 0;
+   let missileCooldown = 0;
+-  const MISSILE_STOCK_MAX = 6;
++  const MISSILE_STOCK_MAX = Infinity; // ミサイルを無制限に扱うための疑似上限値
++  const MAX_CONCURRENT_PLAYER_MISSILES = 4; // 同時発射可能な自機ミサイル数の上限
++  const MISSILE_FIRE_INTERVAL = 0.4; // 連射間隔を短縮して同時発射を支援
+   let missilesRemaining = MISSILE_STOCK_MAX;
+   let missileRequest = false;
+   const boss = {
+     active: false,
+     destroyed: false,
+     spawnTriggerZ: -2400,
+     pos: { x: 0, y: 4, z: -3200 },
+     hp: 1200,
+     maxHp: 1200,
+     fireCooldown: 0,
+     fireInterval: 1.1,
+     shake: 0,
+     edges: null,
+     hitboxes: [],
+     turretYaw: 0,
+     type: "boss",
+     variant: "tank",
+     waveCharge: 0,
+   };
+   let stageClear = false;
+   let stageClearTime = 0;
+   let gameOver = false;
+   let gameOverTime = 0;
+ 
+   // === ゲームフェーズ管理 ===
+-  let gamePhase = "stage0";
++  let gamePhase = "title";
+   let phaseTime = 0;
+   const stage0State = {
+     startZ: 180,
+     targetZ: 42,
+     startY: 12,
+     targetY: 10,
+     doorProgress: 0,
+     launchProgress: 0,
+     thruster: 0,
+   };
+   const hangarScene = createHangarScene();
+   const bossDistanceConstraint = {
+     min: 380, // 自機とボスの最短距離（近接しすぎ防止）
+     max: 520, // 自機弾が届く範囲を維持しつつ遠景シルエットを演出
+   };
+   const battleshipDistanceConstraint = {
+     min: 540, // 戦艦の波動砲を視認しつつ被弾圏外に保つ距離
+     max: 780,
+   };
+   let stage1Clear = false;
+   const cityExitState = {
+     progress: 0,
+     duration: 9.0,
+     passed: false,
+   };
+@@ -731,50 +959,51 @@
+     let z = enemy.base.z;
+     if (enemy.type === "air") {
+       x = (enemy.pathCenterX ?? 0) + wave * (enemy.amplitudeX || 0);
+       y += sway * (enemy.amplitudeY || 0);
+     } else if (enemy.type === "ground") {
+       x = (enemy.pathCenterX ?? 0) + wave * (enemy.amplitudeX || 0);
+       y = Math.max(1.2, enemy.base.y + Math.abs(wave) * 1.2);
+     } else if (enemy.type === "incoming") {
+       x = (enemy.pathCenterX ?? 0) + wave * (enemy.amplitudeX || 0);
+       y += sway * (enemy.amplitudeY || 0);
+     } else if (enemy.type === "pursuer") {
+       x = (enemy.base.x ?? 0) + wave * (enemy.amplitudeX || 0);
+       y = (enemy.base.y ?? 0) + sway * (enemy.amplitudeY || 0);
+     }
+     x = clamp(x, -36, 36);
+     return { x, y, z };
+   }
+ 
+   // === プレイヤー武装ユーティリティ ===
+   function spawnPlayerShot() {
+     const speed = 420;
+     const muzzles = [
+       { x: -1.6, y: -0.8, z: -6 },
+       { x: 1.6, y: -0.8, z: -6 },
+     ];
++    audioSystem.playLaserShot(); // レーザー発射音を再生
+     muzzles.forEach((off) => {
+       // 自機レーザーの発光パラメータを付与
+       playerShots.push({
+         pos: { x: player.pos.x + off.x, y: player.pos.y + off.y, z: player.pos.z + off.z },
+         vel: { x: off.x * 6, y: off.y * 4, z: -speed },
+         ttl: 1.4,
+         lifeMax: 1.4,
+         beam: true,
+         beamLength: 0.28,
+         width: 3.6,
+         color: "rgba(0, 255, 255, 0.9)",
+         glowStart: "rgba(0, 200, 255, 0.55)",
+         glowEnd: "rgba(0, 120, 255, 0.05)",
+         coreColor: "rgba(255, 255, 255, 0.95)",
+         shadowColor: "rgba(0, 180, 255, 0.85)",
+         spawnTime: performance.now(),
+         pulseSpeed: 8.0,
+         pulseRange: 0.2,
+         pulseOffset: Math.random() * Math.PI * 2,
+       });
+     });
+   }
+ 
+   function acquireMissileTarget() {
+     let best = null;
+@@ -785,55 +1014,59 @@
+       const dz = player.pos.z - pose.z;
+       if (dz < 20) return;
+       const dx = player.pos.x - pose.x;
+       const dy = player.pos.y - pose.y;
+       const lateral = Math.hypot(dx, dy);
+       const score = lateral * weight + dz * 0.35;
+       if (score < bestScore) {
+         bestScore = score;
+         best = ref;
+       }
+     };
+     for (const enemy of enemyObjects) {
+       if (!enemy) continue;
+       if (enemy.type === "ground") continue;
+       const pose = getEnemyPose(enemy);
+       consider(pose, enemy, enemy.type === "pursuer" ? 0.7 : 1.0);
+     }
+     if (boss.active && !boss.destroyed) {
+       const bossPose = { x: boss.pos.x, y: boss.pos.y + 6, z: boss.pos.z - 20 };
+       consider(bossPose, boss, 0.6);
+     }
+     return best;
+   }
+ 
+   function spawnPlayerMissile() {
+-    if (missileCooldown > 0 || missilesRemaining <= 0) return;
++    if (missileCooldown > 0) return;
++    if (playerMissiles.length >= MAX_CONCURRENT_PLAYER_MISSILES) {
++      // 画面上のミサイル数が上限に達している場合は追加発射しない
++      return;
++    }
+     const target = acquireMissileTarget();
+     if (!target) return;
+     missilesRemaining -= 1;
+-    missileCooldown = 2.2;
++    missileCooldown = MISSILE_FIRE_INTERVAL;
+     const spawn = { x: player.pos.x, y: player.pos.y - 1.5, z: player.pos.z - 8 };
+     playerMissiles.push({
+       pos: { ...spawn },
+       vel: { x: 0, y: 0, z: -140 },
+       speed: 170,
+       ttl: 6.0,
+       target,
+       turnRate: 4.0,
+       trail: [],
+     });
+   }
+ 
+   function spawnEnemyShot(enemy) {
+     if (typeof enemy.hp === "number" && enemy.hp <= 0) return;
+     const pose = getEnemyPose(enemy);
+     if (!pose) return;
+     const dx = player.pos.x - pose.x;
+     const dy = player.pos.y - pose.y;
+     const dz = player.pos.z - pose.z;
+     const dist = Math.hypot(dx, dy, dz);
+     if (dist < 1e-3) return;
+     const isGround = enemy.type === "ground" || enemy.type === "walker";
+     const speed = isGround ? 260 : 300;
+     const vx = (dx / dist) * speed;
+     const vy = (dy / dist) * speed;
+@@ -1318,220 +1551,341 @@
+           spawnExplosion(boss.pos.x + ox, boss.pos.y + oy, boss.pos.z + oz, 5.4, 1.6);
+         }
+         triggerFinalVictory();
+       } else {
+         for (let i = 0; i < 8; i++) {
+           const ox = (Math.random() - 0.5) * 24;
+           const oy = Math.random() * 10 + 4;
+           const oz = (Math.random() - 0.5) * 28;
+           spawnExplosion(boss.pos.x + ox, boss.pos.y + oy, boss.pos.z + oz, 3.2, 1.1);
+         }
+         triggerCityBossDefeat();
+       }
+     }
+   }
+ 
+   // === シティボス撃破処理 ===
+   function triggerCityBossDefeat() {
+     stage1Clear = true;
+     gamePhase = "cityExit";
+     phaseTime = 0;
+     cityExitState.progress = 0;
+     cityExitState.passed = false;
+     enemyObjects.length = 0;
+     playerShots.length = 0;
+     playerMissiles.length = 0;
++    shieldPickups.length = 0;
+   }
+ 
+   // === 最終撃破処理 ===
+   function triggerFinalVictory() {
+     stageClear = true;
+     stageClearTime = performance.now();
+     gamePhase = "finalClear";
+     phaseTime = 0;
+     enemyObjects.length = 0;
+     enemyShots.length = 0;
+     playerShots.length = 0;
+     playerMissiles.length = 0;
++    shieldPickups.length = 0;
+   }
+ 
+   function applyEnemyDamage(enemyIndex, amount) {
+     const enemy = enemyObjects[enemyIndex];
+     if (!enemy) return false;
+     if (typeof enemy.hp !== "number") return false;
+     enemy.hp = Math.max(0, enemy.hp - amount);
+     enemy.hitFlash = 0.45;
+     if (enemy.hp <= 0) {
+       const pose = getEnemyPose(enemy);
+       if (pose) {
+         spawnExplosion(pose.x, pose.y, pose.z, 1.2, 0.7);
++        if (enemy.dropShield) {
++          spawnShieldPickup(pose.x, pose.y, pose.z, enemy.shieldReward || 35);
++        }
+       }
+       enemyObjects.splice(enemyIndex, 1);
+       return true;
+     }
+     return false;
+   }
+ 
+   function applyPlayerDamage(amount, source) {
+     if (stageClear || gamePhase === "stage0" || gamePhase === "finalClear" || gamePhase === "gameOver") return;
+     if (player.invuln > 0) return;
+     let remaining = amount;
+     if (player.shield > 0) {
+       const absorbed = Math.min(player.shield, remaining);
+       player.shield -= absorbed;
+       remaining -= absorbed;
+     }
+     if (remaining > 0) {
+       player.hp = Math.max(0, player.hp - remaining);
+     }
+     const explosionScale = Math.min(1.8, 0.6 + amount * 0.02);
+     spawnExplosion(player.pos.x, player.pos.y, player.pos.z - 6, explosionScale, 0.45 + amount * 0.01);
+     camera.shake = Math.max(camera.shake, 0.9);
+     player.invuln = 0.9;
+     if (player.hp <= 0) {
+       handlePlayerLifeLoss();
+     }
+   }
+ 
+   function handlePlayerLifeLoss() {
+     player.stocks = Math.max(0, player.stocks - 1);
+     if (player.stocks > 0) {
+       respawnPlayer();
+     } else {
+       triggerPlayerGameOver();
+     }
+   }
+ 
+   function triggerPlayerGameOver() {
+     if (gameOver) return;
+     gameOver = true;
+     gameOverTime = performance.now();
+     gamePhase = "gameOver";
+     phaseTime = 0;
+     stageClear = false;
+     stage1Clear = false;
+-    missilesRemaining = 0;
++    missilesRemaining = MISSILE_STOCK_MAX;
+     player.stocks = 0;
+     player.hp = 0;
+     player.shield = 0;
+     player.invuln = 2.0;
++    player.visible = false; // 自機を非表示にしてゲームオーバー演出を明確化
+     enemyShots.length = 0;
+     playerShots.length = 0;
+     playerMissiles.length = 0;
+     enemyObjects.length = 0;
++    shieldPickups.length = 0;
+     for (let i = 0; i < 6; i++) {
+       const ox = (Math.random() - 0.5) * 14;
+       const oy = Math.random() * 8;
+       const oz = (Math.random() - 0.5) * 12 - 6;
+       spawnExplosion(player.pos.x + ox, player.pos.y + oy, player.pos.z + oz, 2 + i * 0.45, 0.6 + i * 0.12);
+     }
+   }
+ 
+   function spawnExplosion(x, y, z, scale = 1.0, duration = 0.7) {
++    audioSystem.playExplosion(scale); // 爆発規模に応じた効果音を再生
+     const count = 18;
+     const shards = [];
+     for (let i = 0; i < count; i++) {
+       let vx = Math.random() * 2 - 1;
+       let vy = Math.random() * 2 - 1;
+       let vz = Math.random() * 2 - 1;
+       const mag = Math.hypot(vx, vy, vz) || 1;
+       vx /= mag;
+       vy /= mag;
+       vz /= mag;
+       const len = (0.6 + Math.random() * 0.6) * scale;
+       shards.push({ dir: { x: vx, y: vy, z: vz }, len });
+     }
+     const rings = [];
+     for (let r = 0; r < 3; r++) {
+       rings.push({
+         baseRadius: scale * (0.7 + r * 0.55) * (0.8 + Math.random() * 0.4),
+         tilt: (Math.random() * Math.PI) - Math.PI / 2,
+         height: (Math.random() * 1.4 - 0.2) * scale,
+       });
+     }
+     explosions.push({ pos: { x, y, z }, shards, rings, age: 0, duration, scale });
+   }
+ 
++  // === シールド回復アイテム生成 ===
++  function spawnShieldPickup(x, y, z, amount) {
++    // 敵撃破時に出現するシールド補給カプセルを蓄積
++    const baseY = y;
++    shieldPickups.push({
++      pos: { x, y, z },
++      baseY,
++      amount,
++      phase: Math.random() * Math.PI * 2,
++      ttl: 9.0,
++      radius: 10,
++    });
++  }
++
++  // === シールド回復アイテム更新 ===
++  function updateShieldPickups(dt) {
++    if (!shieldPickups.length) return;
++    for (let i = shieldPickups.length - 1; i >= 0; i--) {
++      const pickup = shieldPickups[i];
++      pickup.ttl -= dt;
++      pickup.phase = (pickup.phase + dt * 2.6) % (Math.PI * 2);
++      pickup.pos.y = (pickup.baseY ?? pickup.pos.y) + Math.sin(pickup.phase * 3) * 4;
++      if (pickup.ttl <= 0 || pickup.pos.z > player.pos.z + 80) {
++        shieldPickups.splice(i, 1);
++        continue;
++      }
++      const dx = player.pos.x - pickup.pos.x;
++      const dy = player.pos.y - pickup.pos.y;
++      const dz = player.pos.z - pickup.pos.z;
++      const dist = Math.hypot(dx, dy, dz);
++      if (dist <= pickup.radius + player.hitRadius) {
++        // シールドを回復してドロップを消滅させる
++        player.shield = Math.min(player.maxShield, player.shield + pickup.amount);
++        player.invuln = Math.max(player.invuln, 0.4);
++        spawnExplosion(pickup.pos.x, pickup.pos.y, pickup.pos.z, 0.8, 0.4);
++        shieldPickups.splice(i, 1);
++      }
++    }
++  }
++
++  // === シールド回復アイテム描画 ===
++  function drawShieldPickups() {
++    if (!shieldPickups.length) return;
++    ctx.save();
++    ctx.globalCompositeOperation = "lighter";
++    for (const pickup of shieldPickups) {
++      const head = projectPoint(pickup.pos);
++      if (!head) continue;
++      const pulse = 0.6 + Math.sin(pickup.phase * 4) * 0.2;
++      const radius = (pickup.radius + 3) * pulse;
++      ctx.shadowColor = "rgba(0, 220, 255, 0.8)";
++      ctx.shadowBlur = 24 * pulse;
++      ctx.fillStyle = "rgba(0, 255, 230, 0.7)";
++      ctx.beginPath();
++      ctx.arc(head.x, head.y, radius, 0, Math.PI * 2);
++      ctx.fill();
++      ctx.shadowBlur = 0;
++      ctx.lineWidth = 2;
++      ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
++      ctx.beginPath();
++      ctx.arc(head.x, head.y, radius * 0.7, 0, Math.PI * 2);
++      ctx.stroke();
++    }
++    ctx.restore();
++  }
++
+   function updateExplosions(dt) {
+     for (let i = explosions.length - 1; i >= 0; i--) {
+       const exp = explosions[i];
+       exp.age += dt;
+       if (exp.age >= exp.duration) {
+         explosions.splice(i, 1);
+       }
+     }
+   }
+ 
++  // === シティオブジェクトとの衝突判定 ===
++  function checkCityCollisions() {
++    if (player.invuln > 0) return;
++    for (const obj of cityObjects) {
++      if (obj.type !== "building" || !obj.position || !obj.halfSize) continue;
++      const minZ = obj.position.z - obj.halfSize.z - player.hitRadius;
++      if (minZ > player.pos.z) continue;
++      const maxZ = obj.position.z + obj.halfSize.z + player.hitRadius;
++      if (maxZ < player.pos.z) continue;
++      const minX = obj.position.x - obj.halfSize.x;
++      const maxX = obj.position.x + obj.halfSize.x;
++      const minY = obj.position.y - obj.halfSize.y;
++      const maxY = obj.position.y + obj.halfSize.y;
++      const clampedX = clamp(player.pos.x, minX, maxX);
++      const clampedY = clamp(player.pos.y, minY, maxY);
++      const clampedZ = clamp(player.pos.z, obj.position.z - obj.halfSize.z, obj.position.z + obj.halfSize.z);
++      const dx = player.pos.x - clampedX;
++      const dy = player.pos.y - clampedY;
++      const dz = player.pos.z - clampedZ;
++      const dist = Math.hypot(dx, dy, dz);
++      if (dist <= player.hitRadius) {
++        applyPlayerDamage(32, obj);
++        camera.shake = Math.max(camera.shake, 1.1);
++        break;
++      }
++    }
++  }
++
++  // === 宇宙アステロイドとの衝突判定 ===
++  function checkSpaceCollisions() {
++    if (player.invuln > 0) return;
++    for (const obj of spaceScene.objects) {
++      if (obj.type !== "asteroid" || !obj.center || !obj.radius) continue;
++      const dx = player.pos.x - obj.center.x;
++      const dy = player.pos.y - obj.center.y;
++      const dz = player.pos.z - obj.center.z;
++      const dist = Math.hypot(dx, dy, dz);
++      if (dist <= obj.radius + player.hitRadius) {
++        applyPlayerDamage(36, obj);
++        camera.shake = Math.max(camera.shake, 1.2);
++        break;
++      }
++    }
++  }
++
+   function resetPlayerVitals(fullRestore = true) {
+     // 自機のシールドとHPを所定値にリセット
+     player.hp = player.maxHp;
+     player.shield = player.maxShield;
+     player.invuln = 0;
+     if (fullRestore) {
+       missilesRemaining = MISSILE_STOCK_MAX;
+       player.stocks = player.maxStocks;
+     }
++    player.visible = true; // 復活時には自機を再表示する
+   }
+ 
+   function respawnPlayer() {
+     resetPlayerVitals(false);
+     player.invuln = Math.max(player.invuln, 1.5);
+     player.vel.x = 0;
+     player.vel.y = 0;
+     player.roll = 0;
+     shotCooldown = 0;
+     missileCooldown = 0;
+     missileRequest = false;
+     enemyShots.length = 0;
+     spawnExplosion(player.pos.x, player.pos.y, player.pos.z - 10, 1.8, 0.6);
+   }
+ 
+   // === ステージ0制御 ===
+   function initStage0Scene() {
+     gamePhase = "stage0";
+     phaseTime = 0;
+     stage1Clear = false;
+     stageClear = false;
+     gameOver = false;
+     gameOverTime = 0;
+     stage0State.doorProgress = 0;
+     stage0State.launchProgress = 0;
+     stage0State.thruster = 0;
+     player.pos.x = 0;
+     player.pos.y = stage0State.startY;
+     player.pos.z = stage0State.startZ;
+     player.vel.x = 0;
+     player.vel.y = 0;
+     player.roll = 0;
+     resetPlayerVitals();
+     missileRequest = false;
+     shotCooldown = 0;
+     missileCooldown = 0;
+     playerShots.length = 0;
+     playerMissiles.length = 0;
+     enemyShots.length = 0;
+     explosions.length = 0;
++    shieldPickups.length = 0;
+     camera.pos.x = 4;
+     camera.pos.y = player.pos.y + 6;
+     camera.pos.z = player.pos.z + 56;
+     camera.shake = 0;
+     environment = "city";
+     skyMix = 0;
+   }
+ 
+   function updateStage0(dt) {
+     const t = phaseTime;
+     const doorStart = 0.9;
+     const doorEnd = 2.6;
+     const launchStart = 2.8;
+     const launchDuration = 3.8;
+     const thrusterStart = 2.4;
+ 
+     const doorRatio = (t - doorStart) / Math.max(doorEnd - doorStart, 0.1);
+     stage0State.doorProgress = easeInOutCubic(clamp(doorRatio, 0, 1));
+     stage0State.thruster = smoothstep((t - thrusterStart) / 0.9);
+     const launchRatio = (t - launchStart) / Math.max(launchDuration, 0.1);
+     const launchProgress = easeInOutCubic(clamp(launchRatio, 0, 1));
+     stage0State.launchProgress = launchProgress;
+ 
+     const lateralDrift = Math.sin(t * 0.6) * (1 - launchProgress) * 1.4;
+     player.pos.x = lateralDrift;
+@@ -1735,50 +2089,51 @@
+     const dy = target.y - muzzle.y;
+     const dz = target.z - muzzle.z;
+     const dist = Math.hypot(dx, dy, dz) || 1;
+     const speed = 520;
+     // 波動砲は長尺ビームとして描画
+     enemyShots.push({
+       pos: { ...muzzle },
+       vel: { x: (dx / dist) * speed, y: (dy / dist) * speed, z: (dz / dist) * speed },
+       ttl: 1.6,
+       lifeMax: 1.6,
+       beam: true,
+       beamLength: 1.6,
+       width: 22,
+       color: "rgba(0, 210, 255, 0.96)",
+       glowStart: "rgba(0, 220, 255, 0.72)",
+       glowEnd: "rgba(0, 140, 255, 0.12)",
+       coreColor: "rgba(255, 255, 255, 0.96)",
+       shadowColor: "rgba(0, 180, 255, 0.9)",
+       spawnTime: performance.now(),
+       pulseSpeed: 4.2,
+       pulseRange: 0.25,
+       pulseOffset: Math.random() * Math.PI * 2,
+       damage: 60,
+       hitRadius: 18,
+     });
++    audioSystem.playWaveCannon(); // 波動砲専用の効果音を再生
+     boss.waveCharge = 1;
+     boss.shake = 1.6;
+   }
+ 
+   function updateBoss(dt) {
+     if (boss.variant === "battleship") {
+       updateBattleshipBoss(dt);
+       return;
+     }
+     if (boss.destroyed) {
+       boss.shake = Math.max(0, boss.shake - dt * 1.8);
+       return;
+     }
+     if (!boss.active && player.pos.z <= boss.spawnTriggerZ) {
+       boss.active = true;
+     }
+     if (!boss.active) return;
+     boss.shake = Math.max(0, boss.shake - dt * 1.8);
+     const dx = player.pos.x - boss.pos.x;
+     const dz = player.pos.z - boss.pos.z;
+     const targetYaw = Math.atan2(dx, -(dz || 1e-3));
+     boss.turretYaw += (targetYaw - boss.turretYaw) * Math.min(1, dt * 2.6);
+     boss.fireCooldown -= dt;
+     if (boss.fireCooldown <= 0 && !stageClear) {
+       spawnBossShell();
+@@ -1810,330 +2165,401 @@
+     boss.pos.z += (targetZ - boss.pos.z) * Math.min(1, dt * 0.4);
+     if (boss.fireCooldown <= 0 && !stageClear) {
+       spawnWaveCannon();
+       boss.fireCooldown = boss.fireInterval + Math.random() * 1.6;
+     }
+   }
+ 
+   // === 都市レーン構築 ===
+   function initCity() {
+     cityObjects.length = 0;
+     const laneWidth = 36;
+     const blockDepth = 140; // ブロック間隔を広げて進行距離を延伸
+     const laneCount = 16; // ビル密集地帯を終えた先にボスエリアを配置
+     for (let i = 0; i < laneCount; i++) {
+       const z = -i * blockDepth - 80;
+       // 左右にビル群を配置
+       for (const side of [-1, 1]) {
+         const baseX = side * (laneWidth * 0.7);
+         const towerCount = 3;
+         for (let t = 0; t < towerCount; t++) {
+           const offsetX = baseX + side * (Math.random() * 12 + t * 6);
+           const baseY = Math.random() * 4;
+           const height = 40 + Math.random() * 80;
+           const width = 10 + Math.random() * 14;
+           const depth = 10 + Math.random() * 14;
++          const centerZ = z - t * 12;
+           cityObjects.push({
+             type: "building",
+             zOrigin: z,
+-            position: { x: offsetX, y: height * 0.5 + baseY, z: z - t * 12 },
+-            edges: createBoxEdges(offsetX, height * 0.5 + baseY, z - t * 12, width, height, depth),
++            position: { x: offsetX, y: height * 0.5 + baseY, z: centerZ },
++            halfSize: { x: width * 0.5, y: height * 0.5, z: depth * 0.5 },
++            edges: createBoxEdges(offsetX, height * 0.5 + baseY, centerZ, width, height, depth),
+           });
+         }
+       }
+     }
+     // ゲートを中央レーンに配置
+     const gateZ = -960; // ゲートを遠方へ移動してフライト時間を確保
+     cityObjects.push({
+       type: "gate",
+       zOrigin: gateZ,
+       edges: edgesToFloat32(createGateEdges(0, 24, gateZ, 40, 32, 8, 4)),
+     });
+     // 地面グリッド
+     cityObjects.push({
+       type: "ground",
+       zOrigin: 0,
+       edges: edgesToFloat32(createGroundGrid(20, -3800, 20, 90)),
+     });
+   }
+ 
++  // === シールドキャリア抽選 ===
++  function maybeAssignShieldCarrier(enemy, chance = 0.18) {
++    if (!enemy || enemy.dropShield) return;
++    if (Math.random() >= chance) return;
++    enemy.dropShield = true;
++    enemy.shieldReward = enemy.shieldReward || 40;
++    if (typeof enemy.maxHp === "number") {
++      enemy.maxHp = Math.round(enemy.maxHp * 1.2);
++      enemy.hp = enemy.maxHp;
++    } else if (typeof enemy.hp === "number") {
++      enemy.hp = Math.round(enemy.hp * 1.2);
++    }
++  }
++
+   function initCityEnemies() {
+     enemyObjects.length = 0;
+     // 空中戦闘機
+     const airSpawns = [-360, -520, -720];
+     airSpawns.forEach((z, idx) => {
+       const side = idx % 2 === 0 ? 1 : -1;
+-      enemyObjects.push({
++      const enemy = {
+         type: "air",
+         shape: enemyFighterShape,
+         base: { x: side * 18, y: 20, z },
+         pathCenterX: side * 18,
+         amplitudeX: 16,
+         amplitudeY: 4,
+         frequency: 0.9 + Math.random() * 0.4,
+         phase: Math.random() * Math.PI * 2,
+         fireInterval: 1.3 + Math.random() * 0.6,
+         fireCooldown: Math.random() * 1.0,
+         hp: 80,
+         maxHp: 80,
+         hitRadius: 11,
+         hitFlash: 0,
+-      });
++      };
++      maybeAssignShieldCarrier(enemy, 0.16);
++      enemyObjects.push(enemy);
+     });
+     // 地上ロボット
+     const groundSpawns = [-430, -660];
+     groundSpawns.forEach((z, idx) => {
+       const side = idx % 2 === 0 ? -1 : 1;
+-      enemyObjects.push({
++      const enemy = {
+         type: "ground",
+         shape: enemyRobotShape,
+         base: { x: side * 28, y: 2.2, z },
+         pathCenterX: side * 28,
+         amplitudeX: 10,
+         frequency: 1.4 + Math.random() * 0.4,
+         phase: Math.random() * Math.PI * 2,
+         fireInterval: 1.7 + Math.random() * 0.5,
+         fireCooldown: Math.random() * 1.2,
+         hp: 120,
+         maxHp: 120,
+         hitRadius: 12,
+         hitFlash: 0,
+-      });
++      };
++      maybeAssignShieldCarrier(enemy, 0.14);
++      enemyObjects.push(enemy);
+     });
+     // 画面手前に迫る航空機編隊
+     const formationOffsets = [
+       { x: 0, y: 0, z: 0 },
+       { x: -9, y: -1.5, z: -18 },
+       { x: 9, y: -1.5, z: -18 },
+       { x: -14, y: -2.5, z: -34 },
+       { x: 14, y: -2.5, z: -34 },
+     ];
+     const resetDistance = 1250;
+     formationOffsets.forEach((offset, idx) => {
+-      enemyObjects.push({
++      const enemy = {
+         type: "incoming",
+         shape: enemyFighterShapeIncoming,
+         base: { x: offset.x, y: 22 + offset.y, z: player.pos.z - resetDistance + offset.z },
+         pathCenterX: offset.x,
+         amplitudeX: 4,
+         amplitudeY: 2.8,
+         frequency: 1.05 + idx * 0.07,
+         phase: idx * 0.45,
+         speed: 210,
+         resetDistance,
+         formationOffset: offset,
+         originalX: offset.x,
+         fireInterval: 0.9 + Math.random() * 0.4,
+         fireCooldown: Math.random() * 0.8,
+         hp: 90,
+         maxHp: 90,
+         hitRadius: 10,
+         hitFlash: 0,
+-      });
++      };
++      maybeAssignShieldCarrier(enemy, 0.12);
++      enemyObjects.push(enemy);
+     });
+     // 後方から追尾するエース機
+-    enemyObjects.push({
++    const pursuer = {
+       type: "pursuer",
+       shape: enemyFighterShape,
+       base: { x: player.pos.x, y: player.pos.y + 8, z: player.pos.z + 28 },
+       amplitudeX: 2.5,
+       amplitudeY: 1.8,
+       frequency: 1.4,
+       phase: Math.random() * Math.PI * 2,
+       trailDistance: 24,
+       chaseLerp: 4.0,
+       chaseLerpZ: 2.6,
+       swayFreq: 1.7,
+       swayAmp: 6,
+       fireInterval: 0.75 + Math.random() * 0.35,
+       fireCooldown: 1.0,
+       hp: 150,
+       maxHp: 150,
+       hitRadius: 12,
+       hitFlash: 0,
+-    });
++    };
++    maybeAssignShieldCarrier(pursuer, 0.2);
++    enemyObjects.push(pursuer);
+   }
+ 
+   function initSpaceScene() {
+     spaceScene.objects.length = 0;
+     spaceScene.rings.length = 0;
+     spaceScene.walkers.length = 0;
+     spaceScene.corridors.length = 0;
+     spaceScene.guideBeacons.length = 0;
+     spaceScene.stars = generateStarField(220, 3600, player.pos.z - 2000);
+     const layers = [
+       { count: 8, radius: 42, height: 86, depth: -2600 },
+       { count: 10, radius: 64, height: 120, depth: -3000 },
+       { count: 12, radius: 90, height: 160, depth: -3400 },
+     ];
+     for (const layer of layers) {
+       for (let i = 0; i < layer.count; i++) {
+         const angle = (i / layer.count) * Math.PI * 2 + Math.random() * 0.2;
+         const r = layer.radius + Math.random() * 12 - 6;
+         const x = Math.cos(angle) * r;
+         const z = layer.depth - Math.sin(angle) * r * 1.6;
+         const y = layer.height + Math.sin(angle * 2) * 12;
+         const scale = 1.2 + Math.random() * 0.8;
++        const cluster = createAsteroidCluster(x, y, z, scale);
+         spaceScene.objects.push({
+           type: "asteroid",
+-          edges: edgesToFloat32(createAsteroidCluster(x, y, z, scale)),
++          center: { x, y, z },
++          radius: 9 * scale,
++          edges: edgesToFloat32(cluster),
+         });
+       }
+     }
+     const corridorStart = -2600;
+     const corridorLength = 2200;
+     const corridorEdges = edgesToFloat32(createSpaceCorridor(0, 148, corridorStart, corridorLength, 20, 26));
+     spaceScene.corridors.push({ type: "corridor", edges: corridorEdges });
+     for (let i = 0; i < 6; i++) {
+       const offset = (i / 5) * corridorLength;
+       const baseZ = corridorStart - offset - 120;
+       const offsetX = (Math.random() * 2 - 1) * 52;
+       const offsetY = 150 + Math.random() * 50;
+       const scale = 1.8 + Math.random() * 1.6;
++      const clusterA = createAsteroidCluster(offsetX, offsetY, baseZ, scale);
+       spaceScene.objects.push({
+         type: "asteroid",
+-        edges: edgesToFloat32(createAsteroidCluster(offsetX, offsetY, baseZ, scale)),
++        center: { x: offsetX, y: offsetY, z: baseZ },
++        radius: 9 * scale,
++        edges: edgesToFloat32(clusterA),
+       });
++      const offsetX2 = offsetX * -0.6;
++      const offsetY2 = offsetY - 24;
++      const baseZ2 = baseZ - 60;
++      const scale2 = scale * 0.8;
++      const clusterB = createAsteroidCluster(offsetX2, offsetY2, baseZ2, scale2);
+       spaceScene.objects.push({
+         type: "asteroid",
+-        edges: edgesToFloat32(createAsteroidCluster(offsetX * -0.6, offsetY - 24, baseZ - 60, scale * 0.8)),
++        center: { x: offsetX2, y: offsetY2, z: baseZ2 },
++        radius: 9 * scale2,
++        edges: edgesToFloat32(clusterB),
+       });
+     }
+     const beaconCount = 14;
+     for (let i = 0; i <= beaconCount; i++) {
+       const t = i / beaconCount;
+       const z = corridorStart - corridorLength * t;
+       const sway = Math.sin(t * Math.PI * 1.5) * 6;
+       spaceScene.guideBeacons.push({
+         x: sway * 0.4,
+         y: 150 + Math.sin(t * Math.PI) * 18,
+         z,
+         phase: Math.random() * Math.PI * 2,
+       });
+     }
+     const ringEdges = edgesToFloat32(createAsteroidRingEdges(0, 140, -3000, 52, 12, 32));
+     spaceScene.rings.push({ type: "ring", edges: ringEdges });
+   }
+ 
+   function initSpaceEnemies() {
+     enemyObjects.length = 0;
+     const ambushPositions = [-2800, -3100, -3320, -3600];
+     ambushPositions.forEach((z, idx) => {
+       const side = idx % 2 === 0 ? -1 : 1;
+       const base = { x: side * 26, y: 160 + Math.random() * 18, z };
+-      enemyObjects.push({
++      const enemy = {
+         type: "ambush",
+         shape: enemyFighterShape,
+         base,
+         home: { ...base },
+         amplitudeX: 8,
+         amplitudeY: 5,
+         frequency: 0.8 + Math.random() * 0.5,
+         phase: Math.random() * Math.PI * 2,
+         hp: 120,
+         maxHp: 120,
+         hitRadius: 12,
+         fireInterval: 1.4 + Math.random() * 0.5,
+         fireCooldown: 0.6 + Math.random() * 0.6,
+-      });
++      };
++      maybeAssignShieldCarrier(enemy, 0.18);
++      enemyObjects.push(enemy);
+     });
+     const walkerAnchors = [
+       { x: -34, y: 168, z: -2950 },
+       { x: 28, y: 180, z: -3220 },
+       { x: -12, y: 192, z: -3480 },
+     ];
+     walkerAnchors.forEach((anchor, idx) => {
+       const radius = 9 + Math.random() * 4;
+       spaceScene.walkers.push({ ...anchor, radius });
+       spaceScene.objects.push({
+         type: "platform",
+         edges: edgesToFloat32(createBoxEdges(anchor.x, anchor.y - 2.4, anchor.z, radius * 2.6, 2.6, radius * 2.6)),
+       });
+       const phase = Math.random() * Math.PI * 2;
+       const startX = anchor.x + Math.cos(phase) * radius;
+       const startZ = anchor.z + Math.sin(phase) * radius;
+-      enemyObjects.push({
++      const walker = {
+         type: "walker",
+         shape: enemyRobotShape,
+         orbitCenter: { ...anchor },
+         base: { x: startX, y: anchor.y, z: startZ },
+         orbitSpeed: 0.6 + idx * 0.12,
+         walkPhase: phase,
+         orbitRadius: radius,
+         hp: 150,
+         maxHp: 150,
+         hitRadius: 14,
+         fireInterval: 1.8 + Math.random() * 0.3,
+         fireCooldown: Math.random() * 1.4,
+-      });
++      };
++      maybeAssignShieldCarrier(walker, 0.12);
++      enemyObjects.push(walker);
+     });
+     const interceptors = [-2880, -3160, -3420, -3740];
+     interceptors.forEach((z, idx) => {
+       const offsetX = (idx % 2 === 0 ? -1 : 1) * (14 + idx * 2);
+       const base = { x: offsetX, y: 184, z };
+-      enemyObjects.push({
++      const interceptor = {
+         type: "spaceAir",
+         shape: enemyFighterShape,
+         base,
+         home: { ...base },
+         amplitudeX: 12,
+         amplitudeY: 8,
+         frequency: 1.3 + idx * 0.18,
+         phase: Math.random() * Math.PI * 2,
+         speed: 240,
+         hp: 110,
+         maxHp: 110,
+         hitRadius: 11,
+         fireInterval: 1.0 + Math.random() * 0.4,
+         fireCooldown: Math.random() * 0.8,
+-      });
++      };
++      maybeAssignShieldCarrier(interceptor, 0.2);
++      enemyObjects.push(interceptor);
+     });
+     const corridorGuards = 12;
+     for (let i = 0; i < corridorGuards; i++) {
+       const lane = (i % 3 - 1) * 18 + (Math.random() * 6 - 3);
+       const baseZ = -2700 - i * 150;
+       const base = { x: lane, y: 172 + Math.random() * 14, z: baseZ };
+-      enemyObjects.push({
++      const guard = {
+         type: "corridorGuard",
+         shape: enemyFighterShape,
+         base,
+         home: { ...base },
+         laneX: lane,
+         bobAmp: 10 + Math.random() * 6,
+         speed: 220 + Math.random() * 40,
+         frequency: 1.1 + Math.random() * 0.4,
+         phase: Math.random() * Math.PI * 2,
+         hp: 140,
+         maxHp: 140,
+         hitRadius: 13,
+         fireInterval: 0.9 + Math.random() * 0.4,
+         fireCooldown: 0.4 + Math.random() * 0.6,
+-      });
++      };
++      maybeAssignShieldCarrier(guard, 0.15);
++      enemyObjects.push(guard);
+     }
+   }
+ 
++  function startFromTitle() {
++    if (gamePhase !== "title") return;
++    titleScreen.classList.add("hidden");
++    titleScreen.setAttribute("aria-hidden", "true");
++    keys.clear(); // 誤入力を持ち越さないようにキー状態を初期化
++    initStage0Scene();
++  }
++
++  // ボタン操作でゲーム開始フローへ遷移
++  startButton.addEventListener("click", () => {
++    audioSystem.resume();
++    startFromTitle();
++  });
++
++  // 背景クリックでも即座にローンチシーケンスを開始
++  titleScreen.addEventListener("click", (ev) => {
++    if (ev.target === titleScreen) {
++      audioSystem.resume();
++      startFromTitle();
++    }
++  });
++
+   initStage0Scene();
++  titleScreen.classList.remove("hidden");
++  titleScreen.setAttribute("aria-hidden", "false");
++  gamePhase = "title"; // 初期状態はタイトル画面で待機
++  phaseTime = 0;
+   initCity();
+ 
+   // === ウインドウリサイズ対応 ===
+   function resize() {
+     const dpr = window.devicePixelRatio || 1;
+     canvas.width = Math.round(window.innerWidth * dpr);
+     canvas.height = Math.round(window.innerHeight * dpr);
+     canvas.style.width = "100vw";
+     canvas.style.height = "100vh";
+     ctx.setTransform(1, 0, 0, 1, 0, 0);
+   }
+   window.addEventListener("resize", resize);
+   resize();
+ 
+   // === ビルの再配置（エンドレス化） ===
+   function recycleCityObjects() {
+     for (const obj of cityObjects) {
+       if (obj.type === "ground" || obj.type === "gate") continue;
+       const worldZ = obj.position ? obj.position.z : obj.zOrigin;
+       if (worldZ > player.pos.z + 120) {
+         const move = 2400;
+         if (obj.position) obj.position.z -= move;
+         if (obj.edges) {
+           for (const edge of obj.edges) {
+             edge[0].z -= move;
+@@ -2296,50 +2722,54 @@
+       const bry = (b.x - player.pos.x) * sinR + (b.y - centerY) * cosR + centerY;
+       return [
+         { x: arx, y: ary, z: a.z },
+         { x: brx, y: bry, z: b.z },
+       ];
+     });
+     return rotated;
+   }
+ 
+   // === メインループ ===
+   let prevTime = performance.now();
+   function loop(now) {
+     const dt = Math.min(0.05, (now - prevTime) / 1000);
+     prevTime = now;
+ 
+     update(dt);
+     render();
+ 
+     requestAnimationFrame(loop);
+   }
+ 
+   // === 自機とカメラの更新 ===
+   function update(dt) {
+     simTime += dt;
+     player.invuln = Math.max(0, player.invuln - dt);
++    if (gamePhase === "title") {
++      phaseTime += dt;
++      return;
++    }
+     if (gamePhase === "stage0") {
+       phaseTime += dt;
+       updateStage0(dt);
+       return;
+     }
+     if (gamePhase === "gameOver") {
+       phaseTime += dt;
+       updateGameOver(dt);
+       return;
+     }
+     if (gamePhase === "cityExit") {
+       phaseTime += dt;
+       updateCityExit(dt);
+       return;
+     }
+     if (gamePhase === "stage2") {
+       phaseTime += dt;
+       updateStage2(dt);
+       return;
+     }
+     if (gamePhase === "finalClear") {
+       phaseTime += dt;
+       updateFinalClear(dt);
+       return;
+     }
+@@ -2368,114 +2798,119 @@
+     player.pos.y = clamp(player.pos.y + deltaY, 2, boundsY);
+     player.vel.x = deltaX / Math.max(dt, 1e-4);
+     player.vel.y = deltaY / Math.max(dt, 1e-4);
+     let forwardSpeed = player.speedForward;
+     if (boss.active && !boss.destroyed) {
+       forwardSpeed = 0;
+     }
+     player.pos.z -= forwardSpeed * dt;
+     if (boss.active && !boss.destroyed) {
+       const distance = player.pos.z - boss.pos.z;
+       const clamped = clamp(distance, bossDistanceConstraint.min, bossDistanceConstraint.max);
+       const targetZ = boss.pos.z + clamped;
+       const followRate = Math.min(1, dt * 3.8);
+       player.pos.z += (targetZ - player.pos.z) * followRate;
+     }
+ 
+     player.roll = 0; // ロールを廃してスペースハリアー特有の平行移動に統一
+ 
+     camera.pos.x += (player.pos.x - camera.pos.x) * Math.min(1, dt * 9);
+     camera.pos.y += (player.pos.y + 6 - camera.pos.y) * Math.min(1, dt * 6);
+     camera.pos.z = player.pos.z + 40;
+ 
+     environment = "city";
+     skyMix = Math.max(0, skyMix - dt * 0.25);
+ 
++    checkCityCollisions();
++    updateShieldPickups(dt);
++
+     recycleCityObjects();
+     updateEnemies(dt);
+     updateBoss(dt);
+     updatePlayerWeapons(dt);
+     updateProjectiles(dt);
+     updateExplosions(dt);
+   }
+ 
+   // === シティ撃破後の上昇シーケンス ===
+   function updateCityExit(dt) {
+     environment = cityExitState.progress < 0.75 ? "city" : "space";
+     const accelDecay = Math.pow(0.22, dt * 60);
+     player.vel.x *= accelDecay;
+     player.vel.y *= accelDecay;
+     const prevProg = cityExitState.progress;
+     cityExitState.progress = Math.min(1, cityExitState.progress + dt / cityExitState.duration);
+     const t = cityExitState.progress;
+     const speedBoost = 0.9 + t * 0.35;
+     player.pos.z -= player.speedForward * speedBoost * dt;
+     if (!cityExitState.passed && player.pos.z <= boss.pos.z - 160) {
+       cityExitState.passed = true;
+     }
+     const climbStart = 0.35;
+     const climb = smoothstep((t - climbStart) / Math.max(0.0001, 1 - climbStart));
+     const targetY = stage0State.targetY + 220 + climb * 340;
+     player.pos.y += (targetY - player.pos.y) * Math.min(1, dt * 1.6);
+     player.pos.x *= Math.pow(0.6, dt * 60);
+     player.roll *= Math.pow(0.18, dt * 60);
+ 
+     camera.pos.x += (player.pos.x - camera.pos.x) * Math.min(1, dt * 1.4);
+     camera.pos.y = player.pos.y + 16 - climb * 6;
+     camera.pos.z = player.pos.z + 36 - climb * 32;
+ 
+     skyMix = Math.min(1, skyMix + dt * 0.5 + t * 0.12);
+ 
+     spaceScene.guidePhase = (spaceScene.guidePhase + dt * 1.8) % (Math.PI * 2);
+     animateStars(dt);
++    updateShieldPickups(dt);
+     updateProjectiles(dt);
+     updateExplosions(dt);
+ 
+     if (prevProg < 1 && cityExitState.progress >= 1) {
+       startSpaceStage();
+     }
+   }
+ 
+   // === 宇宙ステージ初期化 ===
+   function startSpaceStage() {
+     cityExitState.progress = 0;
+     cityExitState.passed = false;
+     environment = "space";
+     skyMix = 1;
+     player.vel.x = 0;
+     player.vel.y = 0;
+     player.roll = 0;
+     player.pos.y = Math.max(player.pos.y, 240);
+     player.pos.z = -1800;
+     camera.pos.x = player.pos.x;
+     camera.pos.y = player.pos.y + 18;
+     camera.pos.z = player.pos.z + 60;
+     missilesRemaining = MISSILE_STOCK_MAX;
+     enemyShots.length = 0;
+     playerShots.length = 0;
+     playerMissiles.length = 0;
+     explosions.length = 0;
++    shieldPickups.length = 0;
+     resetPlayerVitals(false);
+     player.shield = player.maxShield; // 宇宙突入時にシールドを再充填
+     player.invuln = 1.2;
+     spaceScene.waveTimer = 0;
+     initSpaceScene();
+     initSpaceEnemies();
+     spaceScene.guidePhase = 0;
+     setupSpaceBattleship();
+     gamePhase = "stage2";
+     phaseTime = 0;
+   }
+ 
+   // === 宇宙ステージの更新 ===
+   function updateStage2(dt) {
+     environment = "space";
+     skyMix = Math.min(1, skyMix + dt * 0.35);
+     const lateralSpeed = 180;
+     const verticalSpeed = 190;
+     const boundsX = 48;
+     const boundsY = 210;
+     const minAltitude = 32 + Math.min(1, skyMix) * 18; // 上空への逃げ場を確保しつつ下限は低めに維持
+ 
+     let inputX = 0;
+     let inputY = 0;
+     if (keys.has("ArrowLeft") || keys.has("KeyA")) inputX -= 1;
+@@ -2483,50 +2918,53 @@
+     if (keys.has("ArrowUp") || keys.has("KeyW")) inputY -= 1;
+     if (keys.has("ArrowDown") || keys.has("KeyS")) inputY += 1;
+ 
+     // 宇宙空間でもハリアー風の即応移動を適用
+     const deltaX = inputX * lateralSpeed * dt;
+     const deltaY = inputY * verticalSpeed * dt;
+     player.pos.x = clamp(player.pos.x + deltaX, -boundsX, boundsX);
+     player.pos.y = clamp(player.pos.y + deltaY, minAltitude, boundsY);
+     player.vel.x = deltaX / Math.max(dt, 1e-4);
+     player.vel.y = deltaY / Math.max(dt, 1e-4);
+ 
+     let forwardSpeed = player.speedForward * 1.25;
+     if (boss.active && !boss.destroyed && boss.variant === "battleship") {
+       forwardSpeed = player.speedForward * 0.7;
+     }
+     player.pos.z -= forwardSpeed * dt;
+     if (boss.active && !boss.destroyed && boss.variant === "battleship") {
+       const distance = player.pos.z - boss.pos.z;
+       const clamped = clamp(distance, battleshipDistanceConstraint.min, battleshipDistanceConstraint.max);
+       const targetZ = boss.pos.z + clamped;
+       player.pos.z += (targetZ - player.pos.z) * Math.min(1, dt * 2.8);
+     }
+ 
+     player.roll = 0;
+ 
++    checkSpaceCollisions();
++    updateShieldPickups(dt);
++
+     camera.pos.x += (player.pos.x - camera.pos.x) * Math.min(1, dt * 8);
+     camera.pos.y += (player.pos.y + 10 - camera.pos.y) * Math.min(1, dt * 5);
+     camera.pos.z = player.pos.z + 52;
+ 
+     spaceScene.waveTimer += dt;
+     spaceScene.guidePhase = (spaceScene.guidePhase + dt * 2.2) % (Math.PI * 2);
+     animateStars(dt);
+     updateEnemies(dt);
+     updateBoss(dt);
+     updatePlayerWeapons(dt);
+     updateProjectiles(dt);
+     updateExplosions(dt);
+   }
+ 
+   // === 最終クリア演出 ===
+   function updateFinalClear(dt) {
+     environment = "space";
+     skyMix = 1;
+     player.vel.x *= Math.pow(0.2, dt * 60);
+     player.vel.y *= Math.pow(0.2, dt * 60);
+     player.pos.z -= player.speedForward * 0.8 * dt;
+     player.pos.y += dt * 32;
+     player.roll *= Math.pow(0.2, dt * 60);
+     camera.pos.x += (player.pos.x - camera.pos.x) * Math.min(1, dt * 0.8);
+     camera.pos.y = player.pos.y + 14;
+@@ -2557,52 +2995,56 @@
+     for (const star of spaceScene.stars) {
+       star.twinkle = (star.twinkle + dt * 2.6) % (Math.PI * 2);
+       star.z -= parallax * dt;
+       if (star.z > player.pos.z - 200) {
+         star.z = player.pos.z - 2000 - Math.random() * 3200;
+         star.x = (Math.random() * 2 - 1) * 260;
+         star.y = Math.random() * 240 + 40;
+       }
+     }
+   }
+ 
+   // === 描画 ===
+   function render() {
+     ctx.fillStyle = "#020818";
+     ctx.fillRect(0, 0, canvas.width, canvas.height);
+     if (skyMix > 0.01) {
+       ctx.fillStyle = `rgba(0, 12, 40, ${Math.min(1, skyMix * 0.9)})`;
+       ctx.fillRect(0, 0, canvas.width, canvas.height);
+     }
+     drawStars(skyMix);
+ 
+     const hpText = `HP ${Math.max(0, Math.round(player.hp))}/${player.maxHp}`;
+     const shieldText = `SHIELD ${Math.max(0, Math.round(player.shield))}`;
+     const stockText = `STOCK ${player.stocks}/${player.maxStocks}`;
+     const vitalsText = `${hpText} / ${shieldText} / ${stockText}`;
+-    const missileText = `MISSILES ${missilesRemaining}/${MISSILE_STOCK_MAX}`;
+-    if (gamePhase === "stage0") {
++    const missileText = Number.isFinite(MISSILE_STOCK_MAX)
++      ? `MISSILES ${missilesRemaining}/${MISSILE_STOCK_MAX}`
++      : "MISSILES ∞"; // 無限ストックであることをHUDに表示
++    if (gamePhase === "title") {
++      hudLabel.textContent = "STAR DOGS / PRESS START";
++    } else if (gamePhase === "stage0") {
+       hudLabel.textContent = "LAUNCH BAY / PREP SEQUENCE";
+     } else if (stageClear) {
+       hudLabel.textContent = "MISSION COMPLETE";
+     } else if (gamePhase === "cityExit") {
+       hudLabel.textContent = `CITY RUN / ${vitalsText} / ${missileText} / ASCENT`;
+     } else if (gamePhase === "stage2" && boss.variant === "battleship" && boss.active && !boss.destroyed) {
+       const waveStatus = boss.waveCharge > 0.05 ? "WAVECANNON" : `BATTLESHIP HP ${Math.max(0, boss.hp)}`;
+       hudLabel.textContent = `ASTEROID RUN / ${vitalsText} / ${missileText} / ${waveStatus}`;
+     } else if (gamePhase === "gameOver") {
+       hudLabel.textContent = `SYSTEM FAILURE / ${vitalsText}`;
+     } else if (environment === "space") {
+       hudLabel.textContent = `ASTEROID RUN / ${vitalsText} / ${missileText}`;
+     } else if (boss.active && !boss.destroyed) {
+       hudLabel.textContent = `CITY RUN / ${vitalsText} / ${missileText} / BOSS HP ${Math.max(0, boss.hp)}`;
+     } else {
+       hudLabel.textContent = `CITY RUN / ${vitalsText} / ${missileText}`;
+     }
+ 
+     ctx.save();
+ 
+     const cityFade = environment === "space" ? Math.max(0, 1 - skyMix * 1.4) : 1;
+     if (cityFade > 0.02) {
+       for (const obj of cityObjects) {
+         if (obj.type === "ground") {
+           drawEdges(obj.edges, `rgba(32, 126, 255, ${0.25 * cityFade})`, 1, `rgba(10, 66, 200, ${0.6 * cityFade})`);
+@@ -2644,68 +3086,73 @@
+       }
+     }
+ 
+     // 敵機描画（空中・地上の両方）
+     const enemyTransform = { tx: 0, ty: 0, tz: 0 }; // 使い回してGC負荷を減らす
+     for (const enemy of enemyObjects) {
+       const pose = getEnemyPose(enemy);
+       if (!pose) continue;
+       enemyTransform.tx = pose.x;
+       enemyTransform.ty = pose.y;
+       enemyTransform.tz = pose.z;
+       const flash = enemy.hitFlash ? Math.min(1, enemy.hitFlash) : 0;
+       if (enemy.type === "air") {
+         drawEdges(enemy.shape, `rgba(0, 255, 210, ${0.75 + flash * 0.5})`, 2.6 + flash * 0.8, `rgba(0, 220, 210, ${0.7 + flash * 0.3})`, enemyTransform);
+       } else if (enemy.type === "incoming") {
+         drawEdges(enemy.shape, `rgba(0, 255, 148, ${0.75 + flash * 0.5})`, 2.8 + flash * 0.9, `rgba(0, 230, 140, ${0.75 + flash * 0.25})`, enemyTransform);
+       } else if (enemy.type === "pursuer") {
+         drawEdges(enemy.shape, `rgba(0, 160, 255, ${0.78 + flash * 0.5})`, 2.8 + flash * 1.0, `rgba(0, 130, 255, ${0.75 + flash * 0.3})`, enemyTransform);
+       } else if (enemy.type === "walker") {
+         drawEdges(enemy.shape, `rgba(0, 180, 255, ${0.74 + flash * 0.4})`, 2.2 + flash * 0.6, `rgba(0, 200, 255, ${0.7 + flash * 0.3})`, enemyTransform);
+       } else if (enemy.type === "ambush" || enemy.type === "spaceAir") {
+         drawEdges(enemy.shape, `rgba(0, 255, 210, ${0.7 + flash * 0.35})`, 2.6 + flash * 0.8, `rgba(0, 220, 255, ${0.68 + flash * 0.3})`, enemyTransform);
+       } else {
+         drawEdges(enemy.shape, `rgba(0, 90, 255, ${0.72 + flash * 0.45})`, 2.0 + flash * 0.7, `rgba(0, 80, 255, ${0.68 + flash * 0.22})`, enemyTransform);
+       }
++      if (enemy.dropShield) {
++        // シールド補給キャリアは金色の光輪で強調表示
++        drawEdges(enemy.shape, `rgba(255, 220, 0, ${0.3 + flash * 0.4})`, 3.2 + flash * 0.9, `rgba(255, 180, 0, ${0.4 + flash * 0.3})`, enemyTransform);
++      }
+     }
+ 
++    drawShieldPickups();
+     drawExplosions();
+ 
+     // 投射物描画（レーザー/ミサイル）
+     drawLaserProjectiles(playerShots, "rgba(0, 255, 255, 0.95)", 2.2, 0.02);
+     drawMissiles(playerMissiles);
+     drawLaserProjectiles(enemyShots, "rgba(255, 90, 120, 0.95)", 1.8, 0.018);
+ 
+     drawPlayerStatusOverlay(hpText, shieldText, stockText);
+ 
+     // 自機描画
+-    if (gamePhase === "stage0") {
++    if (player.visible && gamePhase === "stage0") {
+       drawStage0Thruster();
+     }
+     const nowFrame = performance.now();
+     const invulnFlash = player.invuln > 0 && Math.floor(nowFrame * 0.02) % 2 === 0;
+-    if (!invulnFlash || gamePhase === "stage0") {
++    if (player.visible && (!invulnFlash || gamePhase === "stage0")) {
+       drawEdges(getPlayerEdges(), "rgba(0, 188, 255, 0.95)", 2.4, "rgba(0, 188, 255, 0.9)");
+     }
+ 
+     // ボスHPバーとステージステータス
+     if (boss.active && !boss.destroyed) {
+       const hpRatio = Math.max(0, boss.hp / boss.maxHp);
+       const barWidth = canvas.width * 0.4;
+       const barX = (canvas.width - barWidth) * 0.5;
+       const barY = canvas.height * 0.12;
+       ctx.fillStyle = "rgba(10, 30, 60, 0.6)";
+       ctx.fillRect(barX, barY, barWidth, 12);
+       const barColor = boss.variant === "battleship" ? "rgba(0, 240, 255, 0.9)" : "rgba(0, 180, 255, 0.9)";
+       const frameColor = boss.variant === "battleship" ? "rgba(0, 255, 240, 0.9)" : "rgba(0, 220, 255, 0.9)";
+       ctx.fillStyle = barColor;
+       ctx.fillRect(barX, barY, barWidth * hpRatio, 12);
+       ctx.strokeStyle = frameColor;
+       ctx.strokeRect(barX, barY, barWidth, 12);
+     }
+     if (gamePhase === "gameOver") {
+       const elapsed = (nowFrame - gameOverTime) * 0.001;
+       const alpha = Math.min(1, 0.3 + elapsed * 0.4);
+       ctx.fillStyle = `rgba(255, 80, 120, ${alpha})`;
+       ctx.font = `${64}px "Helvetica Neue", system-ui, sans-serif`;
+       ctx.textAlign = "center";
+       ctx.fillText("GAME OVER", canvas.width * 0.5, canvas.height * 0.38);

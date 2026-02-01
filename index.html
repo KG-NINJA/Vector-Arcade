@@ -1,435 +1,908 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <title>Marineo Vector Run</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <style>
-      :root {
-        color-scheme: dark;
-      }
-      body {
-        margin: 0;
-        overflow: hidden;
-        background: #02070d;
-        font-family: "IBM Plex Mono", monospace;
-        color: #9be8ff;
-      }
-      #hud {
-        position: fixed;
-        top: 16px;
-        left: 18px;
-        font-size: 14px;
-        letter-spacing: 0.12em;
-        background: rgba(0, 12, 28, 0.6);
-        border: 1px solid rgba(102, 220, 255, 0.4);
-        padding: 12px 18px;
-        text-transform: uppercase;
-        text-shadow: 0 0 10px rgba(102, 220, 255, 0.8);
-        pointer-events: none;
-      }
-      #message {
-        position: fixed;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        font-size: clamp(24px, 4vw, 48px);
-        letter-spacing: 0.2em;
-        color: #f7fbff;
-        text-shadow: 0 0 18px rgba(120, 230, 255, 0.9);
-        opacity: 0;
-        transition: opacity 0.8s ease;
-        pointer-events: none;
-        text-align: center;
-      }
-      canvas {
-        display: block;
-      }
-    </style>
-  </head>
-  <body>
-    <canvas id="game"></canvas>
-    <div id="hud">
-      MARINEO WIREFRAME RAID<br />
-      ARROWS move · SPACE jump · R to reset
+<head>
+  <meta charset="UTF-8" />
+  <title>Vector Arcade</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <style>
+    :root {
+      --line: #00ff66;
+      --bg: #000000;
+      --dim: #0a2;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: var(--bg);
+      color: var(--line);
+      font-family: monospace;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .title {
+      font-size: 18px;
+      letter-spacing: 1px;
+    }
+
+    .coins {
+      font-size: 14px;
+    }
+    .time-warning {
+      color: #ff4d4d;
+    }
+
+    main {
+      flex: 1;
+      display: flex;
+      gap: 16px;
+      padding: 16px;
+      overflow-x: auto;
+      overflow-y: hidden;
+    }
+
+    .cabinet {
+      min-width: 220px;
+      border: 1px solid var(--line);
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      height: fit-content;
+      transition: transform 0.18s ease, box-shadow 0.18s ease, border-width 0.18s ease;
+      transform-origin: center;
+    }
+
+    .cabinet.inactive {
+      opacity: 0.3;
+    }
+
+    .cabinet.selected {
+      transform: scale(1.08);
+      border-width: 2px;
+      box-shadow: 0 0 16px rgba(0, 255, 102, 0.25);
+    }
+
+    .cabinet h2 {
+      font-size: 14px;
+      margin: 0 0 8px 0;
+    }
+
+    .screen {
+      flex: 1;
+      min-height: 150px;
+      border: 1px dashed var(--line);
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .screen canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .controls {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    button {
+      background: transparent;
+      border: 1px solid var(--line);
+      color: var(--line);
+      padding: 4px 8px;
+      cursor: pointer;
+      font-family: monospace;
+      transition: all 0.2s;
+    }
+
+    button:hover:not(:disabled) {
+      background: var(--line);
+      color: var(--bg);
+    }
+
+    button:disabled {
+      opacity: 0.3;
+      cursor: default;
+    }
+
+    footer {
+      padding: 8px 16px;
+      border-top: 1px solid var(--line);
+      font-size: 12px;
+      text-align: center;
+      color: var(--dim);
+    }
+
+    /* ===== Ripple Zoom Animation ===== */
+    .ripple-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.9);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 999;
+      pointer-events: none;
+    }
+
+    .ripple-overlay::before,
+    .ripple-overlay::after {
+      content: "";
+      position: absolute;
+      width: 220px;
+      height: 220px;
+      border: 2px solid var(--line);
+      opacity: 0.7;
+      transform: scale(0.2);
+      animation: ripple 1.2s ease-out forwards;
+      border-radius: 50%;
+    }
+
+    .ripple-overlay::after {
+      animation-delay: 0.25s;
+      opacity: 0.4;
+    }
+
+    .ripple-overlay.expand::before,
+    .ripple-overlay.expand::after {
+      width: 200vmax;
+      height: 200vmax;
+      border-width: 1px;
+    }
+
+    @keyframes ripple {
+      from { transform: scale(0.2); opacity: 0.8; }
+      to   { transform: scale(1);   opacity: 0.1; }
+    }
+
+    .zoom-title {
+      position: relative;
+      font-size: 24px;
+      letter-spacing: 2px;
+      animation: flicker 1s ease-in;
+      z-index: 1;
+    }
+
+    @keyframes flicker {
+      0% { opacity: 0; }
+      40% { opacity: 1; }
+      60% { opacity: 0.6; }
+      100% { opacity: 1; }
+    }
+
+    /* ===== Modal ===== */
+    .modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.95);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+
+    .modal-content {
+      border: 2px solid var(--line);
+      padding: 24px;
+      min-width: 200px;
+      text-align: center;
+    }
+
+    .modal-content button {
+      margin-top: 16px;
+    }
+
+    /* ===== Game Overlay ===== */
+    .game-overlay {
+      position: fixed;
+      inset: 0;
+      background: #000;
+      z-index: 1200;
+      display: none;
+      flex-direction: column;
+    }
+
+    .game-overlay.active {
+      display: flex;
+    }
+
+    .game-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(0,0,0,0.9);
+      font-size: 12px;
+    }
+
+    .game-frame {
+      flex: 1;
+      width: 100%;
+      height: 100%;
+      border: 0;
+      display: block;
+      background: #000;
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <div class="title">VECTOR ARCADE</div>
+    <div class="coins">COINS: <span id="coinCount">5</span></div>
+    <div class="coins">TIME LEFT: <span id="timeLeft">--:--</span></div>
+    <button id="buyCoins">BUY COINS</button>
+    <div class="coins" id="redeemStatus"></div>
+  </header>
+
+  <main id="arcade"></main>
+
+  <footer>
+    Insert Coin · One Coin = One Play · No Prizes. Just Play. ·
+    ※デモ版のため決済機能は停止中 / Payments are disabled in demo ·
+    <a href="tokusho.html">特定商取引法に基づく表記</a> /
+    <a href="tokusho-en.html">Legal Notice</a> ·
+    <a
+      href="https://twitter.com/intent/tweet?text=%23KGNINJA%20%23VectorArcade%20https%3A%2F%2Fkg-ninja.github.io%2FVector-Arcade%2F"
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      Post on X: #KGNINJA #VectorArcade
+    </a>
+  </footer>
+
+  <div class="game-overlay" id="gameOverlay">
+    <div class="game-bar">
+      <div id="gameTitle">NOW PLAYING</div>
+      <button id="closeGame">EXIT</button>
     </div>
-    <div id="message">MISSION CLEAR!</div>
-    <script>
-      // 日本語コメント: キャンバスと描画コンテキストを初期化し、リサイズに追従させる。
-      const canvas = document.getElementById("game");
-      const ctx = canvas.getContext("2d");
-      function resize() {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
+    <iframe class="game-frame" id="gameFrame" title="Arcade Game"></iframe>
+  </div>
+
+  <script>
+    /* ===== PSG Beep (Web Audio) ===== */
+    let audioCtx = null;
+    function psgBeep({ freq = 1200, dur = 0.08, vol = 0.2 } = {}) {
+      try {
+        if (!audioCtx) {
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = "square";
+        osc.frequency.value = freq;
+        gain.gain.value = vol;
+        osc.connect(gain).connect(audioCtx.destination);
+        osc.start();
+        gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + dur);
+        osc.stop(audioCtx.currentTime + dur);
+      } catch (e) {
+        console.log('Audio not available');
       }
-      window.addEventListener("resize", resize);
-      resize();
+    }
 
-      // 日本語コメント: 入力状態を追跡する。
-      const keys = { left: false, right: false, jump: false };
-      window.addEventListener("keydown", (event) => {
-        switch (event.code) {
-          case "ArrowLeft":
-          case "KeyA":
-            keys.left = true;
-            break;
-          case "ArrowRight":
-          case "KeyD":
-            keys.right = true;
-            break;
-          case "ArrowUp":
-          case "Space":
-          case "KeyW":
-            keys.jump = true;
-            break;
-          case "KeyR":
-            resetGame();
-            break;
-        }
-      });
-      window.addEventListener("keyup", (event) => {
-        switch (event.code) {
-          case "ArrowLeft":
-          case "KeyA":
-            keys.left = false;
-            break;
-          case "ArrowRight":
-          case "KeyD":
-            keys.right = false;
-            break;
-          case "ArrowUp":
-          case "Space":
-          case "KeyW":
-            keys.jump = false;
-            break;
-        }
-      });
+    /* ===== Custom Modal ===== */
+    function showModal(message) {
+      const modal = document.createElement('div');
+      modal.className = 'modal';
+      modal.innerHTML = `
+        <div class="modal-content">
+          <div>${message}</div>
+          <button onclick="this.closest('.modal').remove()">OK</button>
+        </div>
+      `;
+      document.body.appendChild(modal);
+      psgBeep({ freq: 800, dur: 0.1 });
+    }
 
-      // 日本語コメント: レベルジオメトリをワイヤーフレームのプラットフォームとして定義。
-      const platforms = [
-        { x: -200, y: 360, w: 520, h: 40 },
-        { x: 360, y: 320, w: 180, h: 24 },
-        { x: 640, y: 280, w: 160, h: 20 },
-        { x: 870, y: 240, w: 120, h: 20 },
-        { x: 1090, y: 320, w: 220, h: 24 },
-        { x: 1410, y: 280, w: 180, h: 24 },
-        { x: 1650, y: 320, w: 160, h: 24 },
-        { x: 1920, y: 260, w: 200, h: 24 },
-        { x: 2180, y: 220, w: 220, h: 20 },
-        { x: 2480, y: 320, w: 440, h: 32 },
-        { x: 2960, y: 280, w: 160, h: 24 },
-        { x: 3200, y: 360, w: 480, h: 40 },
-      ];
+    /* ===== Arcade Data ===== */
+    const machines = [
+      { id: "marineo", name: "MARINEO VECTOR RUN", status: "active", gamePath: "marineo/index.html" },
+      { id: "cityshooter", name: "WIREFRAME CITYSHOOTER", status: "active", gamePath: "wireframe_cityshooter/index.html" },
+      { id: "attract-demo", name: "VECTOR SCAN DEMO", status: "coming", demo: true }
+    ];
 
-      const coins = [
-        { x: 420, y: 280, collected: false },
-        { x: 700, y: 240, collected: false },
-        { x: 910, y: 200, collected: false },
-        { x: 1480, y: 240, collected: false },
-        { x: 1950, y: 220, collected: false },
-        { x: 2280, y: 180, collected: false },
-        { x: 2580, y: 280, collected: false },
-        { x: 3040, y: 240, collected: false },
-      ];
+    const storedCoins = localStorage.getItem("coins");
+    const hasFreeCoin = localStorage.getItem("has_free_coin");
+    let coins = storedCoins === null ? 1 : Number(storedCoins);
+    if (!hasFreeCoin && coins <= 0) {
+      coins = 1;
+      localStorage.setItem("has_free_coin", "1");
+    }
+    const coinEl = document.getElementById("coinCount");
+    const timeEl = document.getElementById("timeLeft");
+    const WARNING_MS = 2 * 60 * 1000;
+    const PLAY_MS = 7 * 60 * 1000;
+    const DEMO_MODE = true;
+    // Stripe Payment Link (client-side redirect only)
+    const PAYMENT_LINK_URL = "https://buy.stripe.com/test_14AaEYgEt9tI61G0hx2cg00";
+    // Cloudflare Worker base URL (redeem endpoint)
+    const WORKER_BASE = "https://YOUR-WORKER.workers.dev";
+    const buyBtn = document.getElementById("buyCoins");
+    const redeemStatus = document.getElementById("redeemStatus");
 
-      const enemies = [
-        { x: 620, y: 348, w: 32, h: 28, dir: -1, alive: true },
-        { x: 1320, y: 308, w: 32, h: 28, dir: 1, alive: true },
-        { x: 2450, y: 348, w: 32, h: 28, dir: -1, alive: true },
-      ];
+    function updateCoins() {
+      coinEl.textContent = coins;
+      localStorage.setItem("coins", coins);
+    }
+    updateCoins();
 
-      const flag = { x: 3480, y: 320, h: 120 };
+    function formatTime(ms) {
+      const total = Math.max(0, Math.floor(ms / 1000));
+      const m = String(Math.floor(total / 60)).padStart(2, "0");
+      const s = String(total % 60).padStart(2, "0");
+      return `${m}:${s}`;
+    }
 
-      const player = {
-        x: 40,
-        y: 300,
-        w: 28,
-        h: 32,
-        vx: 0,
-        vy: 0,
-        onGround: false,
-        dying: false,
-        deathTimer: 0,
-      };
+    function updateTimer() {
+      const raw = Number(localStorage.getItem("activePlayUntil") ?? 0);
+      const remaining = raw - Date.now();
+      if (!raw || remaining <= 0) {
+        timeEl.textContent = "00:00";
+        timeEl.classList.remove("time-warning");
+        return;
+      }
+      timeEl.textContent = formatTime(remaining);
+      if (remaining <= WARNING_MS) timeEl.classList.add("time-warning");
+      else timeEl.classList.remove("time-warning");
+    }
 
-      let score = 0;
-      let gameWon = false;
-      const message = document.getElementById("message");
+    updateTimer();
+    setInterval(updateTimer, 1000);
 
-      function resetGame() {
-        player.x = 40;
-        player.y = 300;
-        player.vx = 0;
-        player.vy = 0;
-        player.onGround = false;
-        player.dying = false;
-        player.deathTimer = 0;
-        score = 0;
-        coins.forEach((coin) => (coin.collected = false));
-        enemies.forEach((enemy) => {
-          enemy.alive = true;
-          enemy.x = enemy.x;
+    function ensurePlayTime() {
+      const now = Date.now();
+      const raw = Number(localStorage.getItem("activePlayUntil") ?? 0);
+      if (raw > now) {
+        return true;
+      }
+      if (DEMO_MODE) {
+        localStorage.setItem("activePlayUntil", String(now + PLAY_MS));
+        updateTimer();
+        return true;
+      }
+      if (coins <= 0) {
+        showModal("NO COINS");
+        return false;
+      }
+      coins--;
+      updateCoins();
+      localStorage.setItem("activePlayUntil", String(now + PLAY_MS));
+      updateTimer();
+      return true;
+    }
+
+    // Redeem coins by verifying the session_id with the Worker.
+    async function redeemSession(sessionId) {
+      try {
+        if (redeemStatus) redeemStatus.textContent = "Redeeming...";
+        const res = await fetch(`${WORKER_BASE}/redeem`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ session_id: sessionId }),
         });
-        gameWon = false;
-        message.style.opacity = "0";
+        const data = await res.json();
+        if (!data?.ok) {
+          console.log("Redeem rejected:", data);
+          if (redeemStatus) redeemStatus.textContent = "";
+          return;
+        }
+        const add = Number(data.coins || 0);
+        coins += add;
+        updateCoins();
+        if (redeemStatus) redeemStatus.textContent = "";
+        showModal(`COINS +${add}`);
+      } catch (e) {
+        console.log("Redeem failed:", e);
+        if (redeemStatus) redeemStatus.textContent = "";
       }
+    }
 
-      // 日本語コメント: AABB衝突判定を行うユーティリティ。
-      function intersects(a, b) {
-        return (
-          a.x < b.x + b.w &&
-          a.x + a.w > b.x &&
-          a.y < b.y + b.h &&
-          a.y + a.h > b.y
-        );
-      }
+    // Handle return from Stripe success URL.
+    function handleReturnFromStripe() {
+      const url = new URL(window.location.href);
+      const sessionId = url.searchParams.get("session_id");
+      if (!sessionId) return;
+      redeemSession(sessionId);
+      url.searchParams.delete("session_id");
+      window.history.replaceState({}, document.title, url.toString());
+    }
 
-      const gravity = 1500;
-      const moveSpeed = 560;
-      const jumpSpeed = 640;
-      const groundFriction = 0.96;
-      const airFriction = 0.985;
-      const maxSpeed = 360;
+    buyBtn?.addEventListener("click", () => {
+      showModal("決済停止中のデモ版です");
+    });
 
-      let lastTime = performance.now();
+    const arcade = document.getElementById("arcade");
 
-      const CAMERA_Y = 200;
+    let demoEngine = null;
+    const overlay = document.getElementById("gameOverlay");
+    const overlayTitle = document.getElementById("gameTitle");
+    const overlayFrame = document.getElementById("gameFrame");
+    const overlayClose = document.getElementById("closeGame");
 
-      function update() {
-        const now = performance.now();
-        const dt = Math.min(1 / 30, (now - lastTime) / 1000);
-        lastTime = now;
+    function openGame({ name, path }) {
+      overlayTitle.textContent = `NOW PLAYING: ${name}`;
+      overlayFrame.src = path;
+      overlay.classList.add("active");
+      demoEngine?.setPaused(true);
+      setTimeout(() => overlayFrame.contentWindow?.focus(), 0);
+    }
 
-        if (!gameWon) {
-          if (!player.dying) {
-            if (keys.left) player.vx -= moveSpeed * dt;
-            if (keys.right) player.vx += moveSpeed * dt;
-            const friction = player.onGround ? groundFriction : airFriction;
-            player.vx *= friction;
-            if (player.vx > maxSpeed) player.vx = maxSpeed;
-            if (player.vx < -maxSpeed) player.vx = -maxSpeed;
+    function closeGame() {
+      overlay.classList.remove("active");
+      overlayFrame.src = "about:blank";
+      demoEngine?.setPaused(false);
+    }
 
-            if (keys.jump && player.onGround) {
-              player.vy = -jumpSpeed;
-              player.onGround = false;
-            }
+    overlayClose.addEventListener("click", closeGame);
+
+    const cabinetEls = [];
+    const activeCabinets = [];
+
+    machines.forEach((m, idx) => {
+      const cab = document.createElement("div");
+      cab.className = "cabinet" + (m.status !== "active" ? " inactive" : "");
+      cab.dataset.index = String(idx);
+
+      cab.innerHTML = `
+        <h2>${m.name}</h2>
+        <div class="screen" data-machine="${m.id}">${m.status === "active" ? "READY" : "COMING SOON"}</div>
+        <div class="controls">
+          <span>1 COIN</span>
+          <button ${m.status !== "active" ? "disabled" : ""}>INSERT</button>
+        </div>
+      `;
+
+      const btn = cab.querySelector("button");
+      btn?.addEventListener("click", () => {
+        if (!ensurePlayTime()) return;
+        psgBeep({ freq: 1400, dur: 0.06 });
+        setTimeout(() => psgBeep({ freq: 2200, dur: 0.05 }), 70);
+        startRippleZoom(m.name, () => {
+          if (m.gamePath) {
+            openGame({ name: m.name, path: m.gamePath });
           } else {
-            player.deathTimer += dt;
-            if (player.deathTimer < 0.35) {
-              player.vy = -360;
-              player.vx *= 0.94;
-            } else {
-              player.vy += gravity * dt * 0.5;
-            }
-            const screenY = player.y - CAMERA_Y;
-            if (screenY > canvas.height + 120) {
-              resetGame();
-              return;
-            }
+            demoEngine?.setPaused(false);
           }
+        });
+      });
 
-          player.vy += gravity * dt;
-          player.x += player.vx * dt;
-          player.y += player.vy * dt;
+      if (m.status === "active") {
+        activeCabinets.push(cab);
+      }
+      cabinetEls.push(cab);
+      arcade.appendChild(cab);
+    });
 
-          player.onGround = false;
-          const playerBox = { x: player.x, y: player.y, w: player.w, h: player.h };
+    let selectedIndex = 0;
 
-          if (!player.dying) {
-            for (const platform of platforms) {
-              const platformBox = {
-                x: platform.x,
-                y: platform.y,
-                w: platform.w,
-                h: platform.h,
-              };
-              if (intersects(playerBox, platformBox)) {
-                const prevY = player.y - player.vy * dt;
-                if (prevY + player.h <= platform.y + 2) {
-                  player.y = platform.y - player.h;
-                  player.vy = 0;
-                  player.onGround = true;
-                } else if (prevY >= platform.y + platform.h - 2) {
-                  player.y = platform.y + platform.h;
-                  player.vy = 0;
-                } else if (player.x + player.w / 2 < platform.x + platform.w / 2) {
-                  player.x = platform.x - player.w;
-                  player.vx = 0;
-                } else {
-                  player.x = platform.x + platform.w;
-                  player.vx = 0;
-                }
-                playerBox.x = player.x;
-                playerBox.y = player.y;
-              }
-            }
-          }
+    function updateSelection() {
+      activeCabinets.forEach((cab, i) => {
+        if (i === selectedIndex) cab.classList.add("selected");
+        else cab.classList.remove("selected");
+      });
+    }
 
-          for (const coin of coins) {
-            if (coin.collected) continue;
-            const coinBox = { x: coin.x - 14, y: coin.y - 14, w: 28, h: 28 };
-            if (intersects(playerBox, coinBox)) {
-              coin.collected = true;
-              score += 100;
-            }
-          }
+    function moveSelection(dir) {
+      if (activeCabinets.length === 0) return;
+      selectedIndex = (selectedIndex + dir + activeCabinets.length) % activeCabinets.length;
+      updateSelection();
+      psgBeep({ freq: 1100, dur: 0.04, vol: 0.18 });
+      activeCabinets[selectedIndex].scrollIntoView({ block: "nearest", inline: "center" });
+    }
 
-          if (!player.dying) {
-            for (const enemy of enemies) {
-              if (!enemy.alive) continue;
-              enemy.x += enemy.dir * 60 * dt;
-              const patrolLeft = enemy.xStart ?? (enemy.xStart = enemy.x - 40);
-              const patrolRight = enemy.xEnd ?? (enemy.xEnd = enemy.x + 80);
-              if (enemy.x < patrolLeft) {
-                enemy.x = patrolLeft;
-                enemy.dir = 1;
-              } else if (enemy.x > patrolRight) {
-                enemy.x = patrolRight;
-                enemy.dir = -1;
-              }
-              const enemyBox = { x: enemy.x, y: enemy.y, w: enemy.w, h: enemy.h };
-              if (intersects(playerBox, enemyBox)) {
-                if (player.vy > 0 && player.y + player.h - enemy.y < 18) {
-                  enemy.alive = false;
-                  score += 200;
-                  player.vy = -jumpSpeed * 0.65;
-                } else {
-                  player.dying = true;
-                  player.vx = 0;
-                  player.vy = -240;
-                  player.deathTimer = 0;
-                  break;
-                }
-              }
-            }
-          }
+    function playSelected() {
+      const cab = activeCabinets[selectedIndex];
+      const btn = cab?.querySelector("button");
+      btn?.click();
+    }
 
-          if (!player.dying && player.y > 600) {
-            player.dying = true;
-            player.vx = 0;
-            player.vy = -240;
-            player.deathTimer = 0;
-          }
+    updateSelection();
 
-          if (!player.dying && player.x + player.w > flag.x && player.y + player.h > flag.y - flag.h) {
-            gameWon = true;
-            score += 1000;
-            message.style.opacity = "1";
-          }
-        }
+    window.addEventListener("keydown", (event) => {
+      if (overlay.classList.contains("active")) return;
+      if (event.code === "ArrowLeft") {
+        event.preventDefault();
+        moveSelection(-1);
+      } else if (event.code === "ArrowRight") {
+        event.preventDefault();
+        moveSelection(1);
+      } else if (event.code === "Enter" || event.code === "Space") {
+        event.preventDefault();
+        playSelected();
+      }
+    });
 
-        draw();
-        requestAnimationFrame(update);
+    /* ===== Ripple Zoom Effect ===== */
+    function startRippleZoom(name, onEnd) {
+      const overlay = document.createElement("div");
+      overlay.className = "ripple-overlay";
+      overlay.innerHTML = `<div class="zoom-title">${name}</div>`;
+      document.body.appendChild(overlay);
+
+      setTimeout(() => overlay.classList.add("expand"), 50);
+
+      setTimeout(() => {
+        document.body.removeChild(overlay);
+        showModal(`START ${name}`);
+        if (typeof onEnd === "function") onEnd();
+      }, 1200);
+    }
+
+    /* ===== Vector-Scan Demo ===== */
+    class DemoEngine {
+      constructor({ canvas }) {
+        this.canvas = canvas;
+        this.ctx = canvas.getContext("2d");
+        this.running = false;
+        this.paused = false;
+        this.frame = 0;
+        this.lastW = 0;
+        this.lastH = 0;
+        this.seed = 1337;
+        this.scenes = [];
+        this.activeSceneIndex = 0;
       }
 
-      function draw() {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-        // 日本語コメント: カメラのスクロールを設定。
-        const cameraX = player.x - canvas.width * 0.4;
-        const cameraY = CAMERA_Y;
-
-        // 日本語コメント: 背景グリッドを描画。
-        ctx.save();
-        ctx.strokeStyle = "rgba(32, 90, 140, 0.25)";
-        ctx.lineWidth = 1;
-        const gridSize = 80;
-        for (let x = Math.floor(cameraX / gridSize) * gridSize - cameraX; x < canvas.width; x += gridSize) {
-          ctx.beginPath();
-          ctx.moveTo(x, 0);
-          ctx.lineTo(x, canvas.height);
-          ctx.stroke();
-        }
-        for (let y = -cameraY % gridSize; y < canvas.height; y += gridSize) {
-          ctx.beginPath();
-          ctx.moveTo(0, y);
-          ctx.lineTo(canvas.width, y);
-          ctx.stroke();
-        }
-        ctx.restore();
-
-        ctx.save();
-        ctx.translate(-cameraX, -cameraY);
-
-        // 日本語コメント: プラットフォームをワイヤーフレームで描画。
-        ctx.strokeStyle = "#66e0ff";
-        ctx.lineWidth = 2;
-        for (const platform of platforms) {
-          ctx.strokeRect(platform.x, platform.y, platform.w, platform.h);
-        }
-
-        // 日本語コメント: コインを八角形ラインで描画。
-        ctx.strokeStyle = "#ffd27f";
-        for (const coin of coins) {
-          if (coin.collected) continue;
-          drawPolygon(coin.x, coin.y, 14, 8);
-        }
-
-        // 日本語コメント: 敵をワイヤーフレームの半円ボディとして描画。
-        ctx.strokeStyle = "#ff8fa6";
-        for (const enemy of enemies) {
-          if (!enemy.alive) continue;
-          ctx.beginPath();
-          ctx.moveTo(enemy.x, enemy.y + enemy.h);
-          ctx.lineTo(enemy.x + enemy.w, enemy.y + enemy.h);
-          ctx.moveTo(enemy.x, enemy.y + enemy.h);
-          ctx.quadraticCurveTo(
-            enemy.x + enemy.w / 2,
-            enemy.y - enemy.h * 0.4,
-            enemy.x + enemy.w,
-            enemy.y + enemy.h
-          );
-          ctx.stroke();
-        }
-
-        // 日本語コメント: ゴール旗をワイヤーフレームで描画。
-        ctx.strokeStyle = "#9aff9a";
-        ctx.beginPath();
-        ctx.moveTo(flag.x, flag.y);
-        ctx.lineTo(flag.x, flag.y - flag.h);
-        ctx.lineTo(flag.x + 60, flag.y - flag.h + 20);
-        ctx.lineTo(flag.x, flag.y - flag.h + 40);
-        ctx.stroke();
-
-        // 日本語コメント: プレイヤーを多角形で描画。
-        ctx.strokeStyle = player.dying ? "#ffb6c9" : "#f5fbff";
-        ctx.beginPath();
-        ctx.moveTo(player.x + 6, player.y + player.h);
-        ctx.lineTo(player.x, player.y + player.h - 6);
-        ctx.lineTo(player.x, player.y + 10);
-        ctx.lineTo(player.x + player.w / 2, player.y);
-        ctx.lineTo(player.x + player.w, player.y + 10);
-        ctx.lineTo(player.x + player.w, player.y + player.h - 6);
-        ctx.lineTo(player.x + player.w - 6, player.y + player.h);
-        ctx.closePath();
-        ctx.stroke();
-
-        ctx.restore();
-
-        // 日本語コメント: スコア表示。
-        ctx.save();
-        ctx.fillStyle = "rgba(10, 200, 255, 0.65)";
-        ctx.font = "16px 'IBM Plex Mono', monospace";
-        ctx.textBaseline = "top";
-        ctx.fillText(`SCORE ${score.toString().padStart(6, "0")}`, 18, 72);
-        ctx.restore();
+      setPaused(value) {
+        this.paused = value;
       }
 
-      function drawPolygon(cx, cy, radius, sides) {
-        if (sides < 3) return;
-        ctx.beginPath();
-        for (let i = 0; i <= sides; i++) {
-          const angle = (i / sides) * Math.PI * 2;
-          const x = cx + Math.cos(angle) * radius;
-          const y = cy + Math.sin(angle) * radius;
-          if (i === 0) ctx.moveTo(x, y);
-          else ctx.lineTo(x, y);
-        }
-        ctx.stroke();
+      start() {
+        this.running = true;
+        this.frame = 0;
+        this.loop();
       }
 
-      resetGame();
-      update();
-    </script>
-  </body>
+      stop() {
+        this.running = false;
+      }
+
+      rand() {
+        this.seed = (this.seed * 1664525 + 1013904223) >>> 0;
+        return this.seed / 0xffffffff;
+      }
+
+      resize() {
+        const rect = this.canvas.getBoundingClientRect();
+        const dpr = Math.min(2, window.devicePixelRatio || 1);
+        const w = Math.max(1, Math.floor(rect.width * dpr));
+        const h = Math.max(1, Math.floor(rect.height * dpr));
+        if (w !== this.lastW || h !== this.lastH) {
+          this.canvas.width = w;
+          this.canvas.height = h;
+          this.lastW = w;
+          this.lastH = h;
+        }
+      }
+
+      loop() {
+        if (!this.running) return;
+        this.resize();
+        if (!this.paused) {
+          const t = this.frame / 60;
+          const dt = 1 / 60;
+          this.update(dt, t);
+          this.render(t);
+          this.frame += 1;
+        }
+        requestAnimationFrame(() => this.loop());
+      }
+
+      update(dt, t) {
+        if (this.scenes.length === 0) return;
+        const lastEnd = this.scenes[this.scenes.length - 1].end;
+        if (t >= lastEnd) {
+          this.frame = 0;
+          this.activeSceneIndex = 0;
+          this.scenes[0].scene.enter(0);
+          return;
+        }
+        const current = this.scenes[this.activeSceneIndex];
+        if (t >= current.end && this.activeSceneIndex < this.scenes.length - 1) {
+          this.activeSceneIndex += 1;
+          this.scenes[this.activeSceneIndex].scene.enter(t);
+        }
+        const scene = this.scenes[this.activeSceneIndex].scene;
+        scene.update(dt, t);
+      }
+
+      render(t) {
+        const ctx = this.ctx;
+        ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        const scene = this.scenes[this.activeSceneIndex]?.scene;
+        if (!scene) return;
+        scene.render(ctx, this.canvas, t);
+      }
+    }
+
+    const Mat4 = {
+      identity() {
+        return [
+          1, 0, 0, 0,
+          0, 1, 0, 0,
+          0, 0, 1, 0,
+          0, 0, 0, 1
+        ];
+      },
+      multiply(a, b) {
+        const out = new Array(16);
+        for (let r = 0; r < 4; r++) {
+          for (let c = 0; c < 4; c++) {
+            out[r * 4 + c] =
+              a[r * 4 + 0] * b[0 * 4 + c] +
+              a[r * 4 + 1] * b[1 * 4 + c] +
+              a[r * 4 + 2] * b[2 * 4 + c] +
+              a[r * 4 + 3] * b[3 * 4 + c];
+          }
+        }
+        return out;
+      },
+      translation(x, y, z) {
+        const m = Mat4.identity();
+        m[12] = x; m[13] = y; m[14] = z;
+        return m;
+      },
+      rotationY(a) {
+        const c = Math.cos(a);
+        const s = Math.sin(a);
+        return [
+          c, 0, -s, 0,
+          0, 1, 0, 0,
+          s, 0, c, 0,
+          0, 0, 0, 1
+        ];
+      },
+      rotationX(a) {
+        const c = Math.cos(a);
+        const s = Math.sin(a);
+        return [
+          1, 0, 0, 0,
+          0, c, s, 0,
+          0, -s, c, 0,
+          0, 0, 0, 1
+        ];
+      },
+      scale(s) {
+        return [
+          s, 0, 0, 0,
+          0, s, 0, 0,
+          0, 0, s, 0,
+          0, 0, 0, 1
+        ];
+      },
+      perspective(fov, aspect, near, far) {
+        const f = 1.0 / Math.tan(fov / 2);
+        const nf = 1 / (near - far);
+        return [
+          f / aspect, 0, 0, 0,
+          0, f, 0, 0,
+          0, 0, (far + near) * nf, -1,
+          0, 0, (2 * far * near) * nf, 0
+        ];
+      },
+      lookAt(eye, target, up) {
+        const zx = eye[0] - target[0];
+        const zy = eye[1] - target[1];
+        const zz = eye[2] - target[2];
+        const zLen = Math.hypot(zx, zy, zz) || 1;
+        const zn = [zx / zLen, zy / zLen, zz / zLen];
+
+        const xx = up[1] * zn[2] - up[2] * zn[1];
+        const xy = up[2] * zn[0] - up[0] * zn[2];
+        const xz = up[0] * zn[1] - up[1] * zn[0];
+        const xLen = Math.hypot(xx, xy, xz) || 1;
+        const xn = [xx / xLen, xy / xLen, xz / xLen];
+
+        const yn = [
+          zn[1] * xn[2] - zn[2] * xn[1],
+          zn[2] * xn[0] - zn[0] * xn[2],
+          zn[0] * xn[1] - zn[1] * xn[0]
+        ];
+
+        return [
+          xn[0], yn[0], zn[0], 0,
+          xn[1], yn[1], zn[1], 0,
+          xn[2], yn[2], zn[2], 0,
+          -(xn[0] * eye[0] + xn[1] * eye[1] + xn[2] * eye[2]),
+          -(yn[0] * eye[0] + yn[1] * eye[1] + yn[2] * eye[2]),
+          -(zn[0] * eye[0] + zn[1] * eye[1] + zn[2] * eye[2]),
+          1
+        ];
+      }
+    };
+
+    function projectVertex(v, mvp) {
+      const x = v[0], y = v[1], z = v[2];
+      const px = x * mvp[0] + y * mvp[4] + z * mvp[8] + mvp[12];
+      const py = x * mvp[1] + y * mvp[5] + z * mvp[9] + mvp[13];
+      const pz = x * mvp[2] + y * mvp[6] + z * mvp[10] + mvp[14];
+      const pw = x * mvp[3] + y * mvp[7] + z * mvp[11] + mvp[15];
+      const w = pw || 1;
+      return [px / w, py / w, pz / w];
+    }
+
+    function drawWire(ctx, canvas, verts, lines, color, glow, jitter) {
+      const w = canvas.width;
+      const h = canvas.height;
+      ctx.save();
+      ctx.translate(w / 2, h / 2);
+      ctx.scale(w / 2, -h / 2);
+      if (glow) {
+        ctx.lineWidth = 0.015;
+        ctx.strokeStyle = "rgba(0,255,102,0.25)";
+      } else {
+        ctx.lineWidth = 0.006;
+        ctx.strokeStyle = color;
+      }
+      ctx.beginPath();
+      for (let i = 0; i < lines.length; i += 2) {
+        const a = verts[lines[i]];
+        const b = verts[lines[i + 1]];
+        const jx = (Math.random() - 0.5) * jitter;
+        const jy = (Math.random() - 0.5) * jitter;
+        ctx.moveTo(a[0] + jx, a[1] + jy);
+        ctx.lineTo(b[0] + jx, b[1] + jy);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function buildCube() {
+      const v = [
+        [-1, -1, -1], [1, -1, -1], [1, 1, -1], [-1, 1, -1],
+        [-1, -1, 1], [1, -1, 1], [1, 1, 1], [-1, 1, 1]
+      ];
+      const l = [
+        0,1, 1,2, 2,3, 3,0,
+        4,5, 5,6, 6,7, 7,4,
+        0,4, 1,5, 2,6, 3,7
+      ];
+      return { verts: v, lines: l };
+    }
+
+    function buildGrid(size, step) {
+      const verts = [];
+      const lines = [];
+      let idx = 0;
+      for (let i = -size; i <= size; i += step) {
+        verts.push([i, 0, -size]);
+        verts.push([i, 0, size]);
+        lines.push(idx, idx + 1);
+        idx += 2;
+        verts.push([-size, 0, i]);
+        verts.push([size, 0, i]);
+        lines.push(idx, idx + 1);
+        idx += 2;
+      }
+      return { verts, lines };
+    }
+
+    class SceneOrbitCube {
+      constructor() {
+        this.cube = buildCube();
+      }
+      enter() {}
+      update() {}
+      render(ctx, canvas, t) {
+        const aspect = canvas.width / canvas.height;
+        const proj = Mat4.perspective(Math.PI / 3, aspect, 0.1, 20);
+        const view = Mat4.lookAt([Math.cos(t) * 3, 1.2, Math.sin(t) * 3], [0, 0, 0], [0, 1, 0]);
+        const rot = Mat4.multiply(Mat4.rotationY(t * 1.2), Mat4.rotationX(t * 0.7));
+        const model = Mat4.multiply(Mat4.scale(0.6), rot);
+        const mvp = Mat4.multiply(Mat4.multiply(model, view), proj);
+        const projected = this.cube.verts.map(v => projectVertex(v, mvp));
+        drawWire(ctx, canvas, projected, this.cube.lines, "#00ff66", true, 0.002);
+        drawWire(ctx, canvas, projected, this.cube.lines, "#aaffcc", false, 0.001);
+      }
+    }
+
+    class SceneGridFlight {
+      constructor() {
+        this.grid = buildGrid(2, 0.5);
+      }
+      enter() {}
+      update() {}
+      render(ctx, canvas, t) {
+        const aspect = canvas.width / canvas.height;
+        const proj = Mat4.perspective(Math.PI / 3, aspect, 0.1, 30);
+        const view = Mat4.lookAt([0, 1.2, 3.5], [0, 0, 0], [0, 1, 0]);
+        const rot = Mat4.rotationY(Math.sin(t * 0.6) * 0.4);
+        const model = Mat4.multiply(Mat4.scale(0.5), rot);
+        const mvp = Mat4.multiply(Mat4.multiply(model, view), proj);
+        const projected = this.grid.verts.map(v => projectVertex(v, mvp));
+        drawWire(ctx, canvas, projected, this.grid.lines, "#00ff66", true, 0.002);
+        drawWire(ctx, canvas, projected, this.grid.lines, "#aaffcc", false, 0.001);
+      }
+    }
+
+    class SceneStarSpin {
+      constructor() {
+        this.stars = [];
+        const rng = (seed) => {
+          let s = seed >>> 0;
+          return () => {
+            s = (s * 1664525 + 1013904223) >>> 0;
+            return s / 0xffffffff;
+          };
+        };
+        const rand = rng(4242);
+        for (let i = 0; i < 120; i++) {
+          this.stars.push([
+            (rand() * 2 - 1) * 1.8,
+            (rand() * 2 - 1) * 1.2,
+            (rand() * 2 - 1) * 1.8
+          ]);
+        }
+      }
+      enter() {}
+      update() {}
+      render(ctx, canvas, t) {
+        const aspect = canvas.width / canvas.height;
+        const proj = Mat4.perspective(Math.PI / 3, aspect, 0.1, 20);
+        const view = Mat4.lookAt([Math.sin(t * 0.7) * 2.5, 0.2, Math.cos(t * 0.7) * 2.5], [0, 0, 0], [0, 1, 0]);
+        const rot = Mat4.rotationY(t * 0.8);
+        const model = Mat4.multiply(Mat4.scale(0.8), rot);
+        const mvp = Mat4.multiply(Mat4.multiply(model, view), proj);
+        const projected = this.stars.map(v => projectVertex(v, mvp));
+        ctx.save();
+        ctx.translate(canvas.width / 2, canvas.height / 2);
+        ctx.scale(canvas.width / 2, -canvas.height / 2);
+        ctx.fillStyle = "rgba(0,255,102,0.25)";
+        for (const p of projected) {
+          ctx.beginPath();
+          ctx.arc(p[0], p[1], 0.01, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+    }
+
+    function mountDemo() {
+      const screen = document.querySelector('.screen[data-machine="attract-demo"]');
+      if (!screen) return;
+      screen.textContent = "";
+      const canvas = document.createElement("canvas");
+      screen.appendChild(canvas);
+
+      demoEngine = new DemoEngine({ canvas });
+      demoEngine.scenes = [
+        { start: 0, end: 8, scene: new SceneOrbitCube() },
+        { start: 8, end: 16, scene: new SceneGridFlight() },
+        { start: 16, end: 24, scene: new SceneStarSpin() }
+      ];
+      demoEngine.scenes[0].scene.enter(0);
+      demoEngine.setPaused(false);
+      demoEngine.start();
+
+      window.addEventListener("resize", () => demoEngine.resize());
+    }
+
+    mountDemo();
+  </script>
+</body>
 </html>

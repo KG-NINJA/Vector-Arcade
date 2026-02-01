@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <title>特定商取引法に基づく表記</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <style>
+      :root {
+        --line: #00ff66;
+        --bg: #000000;
+        --dim: #0a2;
+      }
+      html, body {
+        margin: 0;
+        padding: 0;
+        background: var(--bg);
+        color: var(--line);
+        font-family: monospace;
+        height: 100%;
+      }
+      main {
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 24px 16px 48px;
+      }
+      h1 {
+        font-size: 20px;
+        letter-spacing: 1px;
+        border-bottom: 1px solid var(--line);
+        padding-bottom: 8px;
+        margin-bottom: 20px;
+      }
+      dl {
+        display: grid;
+        grid-template-columns: 200px 1fr;
+        gap: 12px 16px;
+        font-size: 14px;
+      }
+      dt {
+        color: var(--dim);
+      }
+      dd {
+        margin: 0;
+      }
+      a {
+        color: var(--line);
+      }
+      footer {
+        margin-top: 24px;
+        font-size: 12px;
+        color: var(--dim);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>特定商取引法に基づく表記</h1>
+      <dl>
+        <dt>販売事業者名</dt>
+        <dd>KG（個人）</dd>
+
+        <dt>所在地</dt>
+        <dd>大阪府（請求があれば遅滞なく開示）</dd>
+
+        <dt>連絡先</dt>
+        <dd><a href="mailto:fuwafuwow@gmail.com">fuwafuwow@gmail.com</a></dd>
+
+        <dt>販売価格</dt>
+        <dd>各商品ページに記載</dd>
+
+        <dt>商品代金以外の必要料金</dt>
+        <dd>なし</dd>
+
+        <dt>支払方法</dt>
+        <dd>クレジットカード（Stripe）</dd>
+
+        <dt>引き渡し時期</dt>
+        <dd>決済完了後、即時</dd>
+
+        <dt>返品・キャンセル</dt>
+        <dd>デジタル商品のため不可</dd>
+      </dl>
+      <footer>Dagashiya Arcade</footer>
+    </main>
+  </body>
+</html>

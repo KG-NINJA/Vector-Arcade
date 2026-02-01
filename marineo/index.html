@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Marineo Vector Run</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      body {
+        margin: 0;
+        overflow: hidden;
+        background: #02070d;
+        font-family: "IBM Plex Mono", monospace;
+        color: #9be8ff;
+      }
+      #hud {
+        position: fixed;
+        top: 16px;
+        left: 18px;
+        font-size: 14px;
+        letter-spacing: 0.12em;
+        background: rgba(0, 12, 28, 0.6);
+        border: 1px solid rgba(102, 220, 255, 0.4);
+        padding: 12px 18px;
+        text-transform: uppercase;
+        text-shadow: 0 0 10px rgba(102, 220, 255, 0.8);
+        pointer-events: none;
+      }
+      #message {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        font-size: clamp(24px, 4vw, 48px);
+        letter-spacing: 0.2em;
+        color: #f7fbff;
+        text-shadow: 0 0 18px rgba(120, 230, 255, 0.9);
+        opacity: 0;
+        transition: opacity 0.8s ease;
+        pointer-events: none;
+        text-align: center;
+      }
+      canvas {
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="game"></canvas>
+    <div id="hud">
+      MARINEO WIREFRAME RAID<br />
+      ARROWS move · SPACE jump · R to reset
+    </div>
+    <div id="message">MISSION CLEAR!</div>
+    <script>
+      // 日本語コメント: キャンバスと描画コンテキストを初期化し、リサイズに追従させる。
+      const canvas = document.getElementById("game");
+      const ctx = canvas.getContext("2d");
+      function resize() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+      }
+      window.addEventListener("resize", resize);
+      resize();
+
+      // 日本語コメント: 入力状態を追跡する。
+      const keys = { left: false, right: false, jump: false };
+      window.addEventListener("keydown", (event) => {
+        switch (event.code) {
+          case "ArrowLeft":
+          case "KeyA":
+            keys.left = true;
+            break;
+          case "ArrowRight":
+          case "KeyD":
+            keys.right = true;
+            break;
+          case "ArrowUp":
+          case "Space":
+          case "KeyW":
+            keys.jump = true;
+            break;
+          case "KeyR":
+            resetGame();
+            break;
+        }
+      });
+      window.addEventListener("keyup", (event) => {
+        switch (event.code) {
+          case "ArrowLeft":
+          case "KeyA":
+            keys.left = false;
+            break;
+          case "ArrowRight":
+          case "KeyD":
+            keys.right = false;
+            break;
+          case "ArrowUp":
+          case "Space":
+          case "KeyW":
+            keys.jump = false;
+            break;
+        }
+      });
+
+      // 日本語コメント: レベルジオメトリをワイヤーフレームのプラットフォームとして定義。
+      const platforms = [
+        { x: -200, y: 360, w: 520, h: 40 },
+        { x: 360, y: 320, w: 180, h: 24 },
+        { x: 640, y: 280, w: 160, h: 20 },
+        { x: 870, y: 240, w: 120, h: 20 },
+        { x: 1090, y: 320, w: 220, h: 24 },
+        { x: 1410, y: 280, w: 180, h: 24 },
+        { x: 1650, y: 320, w: 160, h: 24 },
+        { x: 1920, y: 260, w: 200, h: 24 },
+        { x: 2180, y: 220, w: 220, h: 20 },
+        { x: 2480, y: 320, w: 440, h: 32 },
+        { x: 2960, y: 280, w: 160, h: 24 },
+        { x: 3200, y: 360, w: 480, h: 40 },
+      ];
+
+      const coins = [
+        { x: 420, y: 280, collected: false },
+        { x: 700, y: 240, collected: false },
+        { x: 910, y: 200, collected: false },
+        { x: 1480, y: 240, collected: false },
+        { x: 1950, y: 220, collected: false },
+        { x: 2280, y: 180, collected: false },
+        { x: 2580, y: 280, collected: false },
+        { x: 3040, y: 240, collected: false },
+      ];
+
+      const enemies = [
+        { x: 620, y: 348, w: 32, h: 28, dir: -1, alive: true },
+        { x: 1320, y: 308, w: 32, h: 28, dir: 1, alive: true },
+        { x: 2450, y: 348, w: 32, h: 28, dir: -1, alive: true },
+      ];
+
+      const flag = { x: 3480, y: 320, h: 120 };
+
+      const player = {
+        x: 40,
+        y: 300,
+        w: 28,
+        h: 32,
+        vx: 0,
+        vy: 0,
+        onGround: false,
+        dying: false,
+        deathTimer: 0,
+      };
+
+      let score = 0;
+      let gameWon = false;
+      const message = document.getElementById("message");
+
+      function resetGame() {
+        player.x = 40;
+        player.y = 300;
+        player.vx = 0;
+        player.vy = 0;
+        player.onGround = false;
+        player.dying = false;
+        player.deathTimer = 0;
+        score = 0;
+        coins.forEach((coin) => (coin.collected = false));
+        enemies.forEach((enemy) => {
+          enemy.alive = true;
+          enemy.x = enemy.x;
+        });
+        gameWon = false;
+        message.style.opacity = "0";
+      }
+
+      // 日本語コメント: AABB衝突判定を行うユーティリティ。
+      function intersects(a, b) {
+        return (
+          a.x < b.x + b.w &&
+          a.x + a.w > b.x &&
+          a.y < b.y + b.h &&
+          a.y + a.h > b.y
+        );
+      }
+
+      const gravity = 1500;
+      const moveSpeed = 560;
+      const jumpSpeed = 640;
+      const groundFriction = 0.96;
+      const airFriction = 0.985;
+      const maxSpeed = 360;
+
+      let lastTime = performance.now();
+
+      const CAMERA_Y = 200;
+
+      function update() {
+        const now = performance.now();
+        const dt = Math.min(1 / 30, (now - lastTime) / 1000);
+        lastTime = now;
+
+        if (!gameWon) {
+          if (!player.dying) {
+            if (keys.left) player.vx -= moveSpeed * dt;
+            if (keys.right) player.vx += moveSpeed * dt;
+            const friction = player.onGround ? groundFriction : airFriction;
+            player.vx *= friction;
+            if (player.vx > maxSpeed) player.vx = maxSpeed;
+            if (player.vx < -maxSpeed) player.vx = -maxSpeed;
+
+            if (keys.jump && player.onGround) {
+              player.vy = -jumpSpeed;
+              player.onGround = false;
+            }
+          } else {
+            player.deathTimer += dt;
+            if (player.deathTimer < 0.35) {
+              player.vy = -360;
+              player.vx *= 0.94;
+            } else {
+              player.vy += gravity * dt * 0.5;
+            }
+            const screenY = player.y - CAMERA_Y;
+            if (screenY > canvas.height + 120) {
+              resetGame();
+              return;
+            }
+          }
+
+          player.vy += gravity * dt;
+          player.x += player.vx * dt;
+          player.y += player.vy * dt;
+
+          player.onGround = false;
+          const playerBox = { x: player.x, y: player.y, w: player.w, h: player.h };
+
+          if (!player.dying) {
+            for (const platform of platforms) {
+              const platformBox = {
+                x: platform.x,
+                y: platform.y,
+                w: platform.w,
+                h: platform.h,
+              };
+              if (intersects(playerBox, platformBox)) {
+                const prevY = player.y - player.vy * dt;
+                if (prevY + player.h <= platform.y + 2) {
+                  player.y = platform.y - player.h;
+                  player.vy = 0;
+                  player.onGround = true;
+                } else if (prevY >= platform.y + platform.h - 2) {
+                  player.y = platform.y + platform.h;
+                  player.vy = 0;
+                } else if (player.x + player.w / 2 < platform.x + platform.w / 2) {
+                  player.x = platform.x - player.w;
+                  player.vx = 0;
+                } else {
+                  player.x = platform.x + platform.w;
+                  player.vx = 0;
+                }
+                playerBox.x = player.x;
+                playerBox.y = player.y;
+              }
+            }
+          }
+
+          for (const coin of coins) {
+            if (coin.collected) continue;
+            const coinBox = { x: coin.x - 14, y: coin.y - 14, w: 28, h: 28 };
+            if (intersects(playerBox, coinBox)) {
+              coin.collected = true;
+              score += 100;
+            }
+          }
+
+          if (!player.dying) {
+            for (const enemy of enemies) {
+              if (!enemy.alive) continue;
+              enemy.x += enemy.dir * 60 * dt;
+              const patrolLeft = enemy.xStart ?? (enemy.xStart = enemy.x - 40);
+              const patrolRight = enemy.xEnd ?? (enemy.xEnd = enemy.x + 80);
+              if (enemy.x < patrolLeft) {
+                enemy.x = patrolLeft;
+                enemy.dir = 1;
+              } else if (enemy.x > patrolRight) {
+                enemy.x = patrolRight;
+                enemy.dir = -1;
+              }
+              const enemyBox = { x: enemy.x, y: enemy.y, w: enemy.w, h: enemy.h };
+              if (intersects(playerBox, enemyBox)) {
+                if (player.vy > 0 && player.y + player.h - enemy.y < 18) {
+                  enemy.alive = false;
+                  score += 200;
+                  player.vy = -jumpSpeed * 0.65;
+                } else {
+                  player.dying = true;
+                  player.vx = 0;
+                  player.vy = -240;
+                  player.deathTimer = 0;
+                  break;
+                }
+              }
+            }
+          }
+
+          if (!player.dying && player.y > 600) {
+            player.dying = true;
+            player.vx = 0;
+            player.vy = -240;
+            player.deathTimer = 0;
+          }
+
+          if (!player.dying && player.x + player.w > flag.x && player.y + player.h > flag.y - flag.h) {
+            gameWon = true;
+            score += 1000;
+            message.style.opacity = "1";
+          }
+        }
+
+        draw();
+        requestAnimationFrame(update);
+      }
+
+      function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // 日本語コメント: カメラのスクロールを設定。
+        const cameraX = player.x - canvas.width * 0.4;
+        const cameraY = CAMERA_Y;
+
+        // 日本語コメント: 背景グリッドを描画。
+        ctx.save();
+        ctx.strokeStyle = "rgba(32, 90, 140, 0.25)";
+        ctx.lineWidth = 1;
+        const gridSize = 80;
+        for (let x = Math.floor(cameraX / gridSize) * gridSize - cameraX; x < canvas.width; x += gridSize) {
+          ctx.beginPath();
+          ctx.moveTo(x, 0);
+          ctx.lineTo(x, canvas.height);
+          ctx.stroke();
+        }
+        for (let y = -cameraY % gridSize; y < canvas.height; y += gridSize) {
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.lineTo(canvas.width, y);
+          ctx.stroke();
+        }
+        ctx.restore();
+
+        ctx.save();
+        ctx.translate(-cameraX, -cameraY);
+
+        // 日本語コメント: プラットフォームをワイヤーフレームで描画。
+        ctx.strokeStyle = "#66e0ff";
+        ctx.lineWidth = 2;
+        for (const platform of platforms) {
+          ctx.strokeRect(platform.x, platform.y, platform.w, platform.h);
+        }
+
+        // 日本語コメント: コインを八角形ラインで描画。
+        ctx.strokeStyle = "#ffd27f";
+        for (const coin of coins) {
+          if (coin.collected) continue;
+          drawPolygon(coin.x, coin.y, 14, 8);
+        }
+
+        // 日本語コメント: 敵をワイヤーフレームの半円ボディとして描画。
+        ctx.strokeStyle = "#ff8fa6";
+        for (const enemy of enemies) {
+          if (!enemy.alive) continue;
+          ctx.beginPath();
+          ctx.moveTo(enemy.x, enemy.y + enemy.h);
+          ctx.lineTo(enemy.x + enemy.w, enemy.y + enemy.h);
+          ctx.moveTo(enemy.x, enemy.y + enemy.h);
+          ctx.quadraticCurveTo(
+            enemy.x + enemy.w / 2,
+            enemy.y - enemy.h * 0.4,
+            enemy.x + enemy.w,
+            enemy.y + enemy.h
+          );
+          ctx.stroke();
+        }
+
+        // 日本語コメント: ゴール旗をワイヤーフレームで描画。
+        ctx.strokeStyle = "#9aff9a";
+        ctx.beginPath();
+        ctx.moveTo(flag.x, flag.y);
+        ctx.lineTo(flag.x, flag.y - flag.h);
+        ctx.lineTo(flag.x + 60, flag.y - flag.h + 20);
+        ctx.lineTo(flag.x, flag.y - flag.h + 40);
+        ctx.stroke();
+
+        // 日本語コメント: プレイヤーを多角形で描画。
+        ctx.strokeStyle = player.dying ? "#ffb6c9" : "#f5fbff";
+        ctx.beginPath();
+        ctx.moveTo(player.x + 6, player.y + player.h);
+        ctx.lineTo(player.x, player.y + player.h - 6);
+        ctx.lineTo(player.x, player.y + 10);
+        ctx.lineTo(player.x + player.w / 2, player.y);
+        ctx.lineTo(player.x + player.w, player.y + 10);
+        ctx.lineTo(player.x + player.w, player.y + player.h - 6);
+        ctx.lineTo(player.x + player.w - 6, player.y + player.h);
+        ctx.closePath();
+        ctx.stroke();
+
+        ctx.restore();
+
+        // 日本語コメント: スコア表示。
+        ctx.save();
+        ctx.fillStyle = "rgba(10, 200, 255, 0.65)";
+        ctx.font = "16px 'IBM Plex Mono', monospace";
+        ctx.textBaseline = "top";
+        ctx.fillText(`SCORE ${score.toString().padStart(6, "0")}`, 18, 72);
+        ctx.restore();
+      }
+
+      function drawPolygon(cx, cy, radius, sides) {
+        if (sides < 3) return;
+        ctx.beginPath();
+        for (let i = 0; i <= sides; i++) {
+          const angle = (i / sides) * Math.PI * 2;
+          const x = cx + Math.cos(angle) * radius;
+          const y = cy + Math.sin(angle) * radius;
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+      }
+
+      resetGame();
+      update();
+    </script>
+  </body>
+</html>
