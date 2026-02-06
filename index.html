@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <title>Vector Arcade</title>
@@ -12,7 +13,8 @@
       --dim: #0a2;
     }
 
-    html, body {
+    html,
+    body {
       margin: 0;
       padding: 0;
       background: var(--bg);
@@ -43,6 +45,7 @@
     .coins {
       font-size: 14px;
     }
+
     .time-warning {
       color: #ff4d4d;
     }
@@ -140,7 +143,7 @@
     .ripple-overlay {
       position: fixed;
       inset: 0;
-      background: rgba(0,0,0,0.9);
+      background: rgba(0, 0, 0, 0.9);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -174,8 +177,15 @@
     }
 
     @keyframes ripple {
-      from { transform: scale(0.2); opacity: 0.8; }
-      to   { transform: scale(1);   opacity: 0.1; }
+      from {
+        transform: scale(0.2);
+        opacity: 0.8;
+      }
+
+      to {
+        transform: scale(1);
+        opacity: 0.1;
+      }
     }
 
     .zoom-title {
@@ -187,17 +197,28 @@
     }
 
     @keyframes flicker {
-      0% { opacity: 0; }
-      40% { opacity: 1; }
-      60% { opacity: 0.6; }
-      100% { opacity: 1; }
+      0% {
+        opacity: 0;
+      }
+
+      40% {
+        opacity: 1;
+      }
+
+      60% {
+        opacity: 0.6;
+      }
+
+      100% {
+        opacity: 1;
+      }
     }
 
     /* ===== Modal ===== */
     .modal {
       position: fixed;
       inset: 0;
-      background: rgba(0,0,0,0.95);
+      background: rgba(0, 0, 0, 0.95);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -235,7 +256,7 @@
       align-items: center;
       padding: 8px 12px;
       border-bottom: 1px solid var(--line);
-      background: rgba(0,0,0,0.9);
+      background: rgba(0, 0, 0, 0.9);
       font-size: 12px;
     }
 
@@ -263,14 +284,14 @@
 
   <footer>
     Insert Coin · One Coin = 7 Minutes · No Prizes. Just Play. ·
-    ※デモ版のため決済機能は停止中 / Payments are disabled in demo ·
+    <span id="cabinetHint">ARROW KEYS TO BROWSE · ENTER TO PLAY</span> ·
+    <span id="cabinetCounter">CABINET 1/1</span> ·
     <a href="tokusho.html">特定商取引法に基づく表記</a> /
     <a href="tokusho-en.html">Legal Notice</a> ·
-    <a
-      href="https://twitter.com/intent/tweet?text=%23KGNINJA%20%23VectorArcade%20https%3A%2F%2Fkg-ninja.github.io%2FVector-Arcade%2F"
-      target="_blank"
-      rel="noopener noreferrer"
-    >
+    <a href="privacy.html">プライバシーポリシー</a> /
+    <a href="privacy-en.html">Privacy Policy</a> ·
+    <a href="https://twitter.com/intent/tweet?text=%23KGNINJA%20%23VectorArcade%20https%3A%2F%2Fkg-ninja.github.io%2FVector-Arcade%2F"
+      target="_blank" rel="noopener noreferrer">
       Post on X: #KGNINJA #VectorArcade
     </a>
   </footer>
@@ -323,7 +344,9 @@
     const machines = [
       { id: "marineo", name: "MARINEO VECTOR RUN", status: "active", gamePath: "marineo/index.html" },
       { id: "cityshooter", name: "WIREFRAME CITYSHOOTER", status: "active", gamePath: "wireframe_cityshooter/index.html" },
-      { id: "attract-demo", name: "VECTOR SCAN DEMO", status: "coming", demo: true }
+      { id: "hexfrontline", name: "HEX FRONTLINE", status: "active", gamePath: "hex_frontline/index.html" },
+      { id: "vector-orb-fall", name: "VECTOR ORB FALL", status: "active", gamePath: "vector_orb_fall/index.html" },
+      { id: "vector-duel-ronde", name: "VECTOR DUEL RONDE", status: "active", gamePath: "vector_duel_ronde/index.html" }
     ];
 
     const storedCoins = localStorage.getItem("coins");
@@ -337,13 +360,14 @@
     const timeEl = document.getElementById("timeLeft");
     const WARNING_MS = 2 * 60 * 1000;
     const PLAY_MS = 7 * 60 * 1000;
-    const DEMO_MODE = true;
+    const DEMO_MODE = false;
     // Stripe Payment Link (client-side redirect only)
     const PAYMENT_LINK_URL = "https://buy.stripe.com/test_14AaEYgEt9tI61G0hx2cg00";
     // Cloudflare Worker base URL (redeem endpoint)
-    const WORKER_BASE = "https://YOUR-WORKER.workers.dev";
+    const WORKER_BASE = "https://vector-arcade-worker.your-subdomain.workers.dev";
     const buyBtn = document.getElementById("buyCoins");
     const redeemStatus = document.getElementById("redeemStatus");
+    const cabinetCounterEl = document.getElementById("cabinetCounter");
 
     function updateCoins() {
       coinEl.textContent = coins;
@@ -433,7 +457,7 @@
     }
 
     buyBtn?.addEventListener("click", () => {
-      showModal("決済停止中のデモ版です");
+      window.location.href = PAYMENT_LINK_URL;
     });
 
     const arcade = document.getElementById("arcade");
@@ -505,6 +529,10 @@
         if (i === selectedIndex) cab.classList.add("selected");
         else cab.classList.remove("selected");
       });
+      if (cabinetCounterEl) {
+        const current = activeCabinets.length ? selectedIndex + 1 : 0;
+        cabinetCounterEl.textContent = `CABINET ${current}/${activeCabinets.length}`;
+      }
     }
 
     function moveSelection(dir) {
@@ -778,9 +806,9 @@
         [-1, -1, 1], [1, -1, 1], [1, 1, 1], [-1, 1, 1]
       ];
       const l = [
-        0,1, 1,2, 2,3, 3,0,
-        4,5, 5,6, 6,7, 7,4,
-        0,4, 1,5, 2,6, 3,7
+        0, 1, 1, 2, 2, 3, 3, 0,
+        4, 5, 5, 6, 6, 7, 7, 4,
+        0, 4, 1, 5, 2, 6, 3, 7
       ];
       return { verts: v, lines: l };
     }
@@ -806,8 +834,8 @@
       constructor() {
         this.cube = buildCube();
       }
-      enter() {}
-      update() {}
+      enter() { }
+      update() { }
       render(ctx, canvas, t) {
         const aspect = canvas.width / canvas.height;
         const proj = Mat4.perspective(Math.PI / 3, aspect, 0.1, 20);
@@ -825,8 +853,8 @@
       constructor() {
         this.grid = buildGrid(2, 0.5);
       }
-      enter() {}
-      update() {}
+      enter() { }
+      update() { }
       render(ctx, canvas, t) {
         const aspect = canvas.width / canvas.height;
         const proj = Mat4.perspective(Math.PI / 3, aspect, 0.1, 30);
@@ -859,8 +887,8 @@
           ]);
         }
       }
-      enter() {}
-      update() {}
+      enter() { }
+      update() { }
       render(ctx, canvas, t) {
         const aspect = canvas.width / canvas.height;
         const proj = Mat4.perspective(Math.PI / 3, aspect, 0.1, 20);
@@ -905,4 +933,5 @@
     mountDemo();
   </script>
 </body>
+
 </html>

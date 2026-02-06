@@ -1,0 +1,1234 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HEX FRONTLINE</title>
+    <style>
+      :root {
+        --bg: #020503;
+        --line: #59ff9f;
+        --line2: #86ffd9;
+        --warn: #ff6767;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: var(--bg);
+        color: var(--line);
+        font-family: "IBM Plex Mono", monospace;
+      }
+      #game {
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+      #hud {
+        position: fixed;
+        top: 12px;
+        left: 12px;
+        border: 1px solid rgba(89, 255, 159, 0.65);
+        background: rgba(0, 18, 10, 0.6);
+        padding: 10px 12px;
+        font-size: 13px;
+        line-height: 1.45;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        text-shadow: 0 0 10px rgba(89, 255, 159, 0.7);
+        pointer-events: none;
+      }
+      #help {
+        position: fixed;
+        right: 12px;
+        bottom: 12px;
+        border: 1px solid rgba(134, 255, 217, 0.45);
+        background: rgba(0, 10, 6, 0.7);
+        color: var(--line2);
+        padding: 8px 10px;
+        font-size: 12px;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        text-shadow: 0 0 8px rgba(134, 255, 217, 0.55);
+        pointer-events: none;
+      }
+      #status {
+        color: var(--line2);
+      }
+      .warn {
+        color: var(--warn);
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="game"></canvas>
+    <div id="hud">
+      HEX FRONTLINE<br />
+      TURN: <span id="turn">1</span><br />
+      SIDE: <span id="side">PLAYER</span><br />
+      AP: <span id="ap">2</span><br />
+      PLAYER UNITS: <span id="pcount">0</span><br />
+      CPU UNITS: <span id="ccount">0</span><br />
+      MODE: <span id="mode">STRATEGY</span><br />
+      <span id="status">READY</span>
+    </div>
+    <div id="help">
+      MOUSE/ARROWS SELECT · ENTER ATTACK/MOVE · E END TURN · R RESET<br />
+      TRIAD: GA > GF > AIR > GA
+    </div>
+    <script>
+      const canvas = document.getElementById("game");
+      const ctx = canvas.getContext("2d");
+
+      const hudTurn = document.getElementById("turn");
+      const hudSide = document.getElementById("side");
+      const hudAp = document.getElementById("ap");
+      const hudPCount = document.getElementById("pcount");
+      const hudCCount = document.getElementById("ccount");
+      const hudMode = document.getElementById("mode");
+      const hudStatus = document.getElementById("status");
+
+      const BOARD_SIZE = 9;
+      const HEX_SIZE = 34;
+      const TURN_AP = 2;
+      const MAX_TURNS = 60;
+      const BATTLE_DURATION = 2500;
+
+      const SIDES = { PLAYER: "player", CPU: "cpu" };
+      const UNIT_TYPES = {
+        GROUND_ASSAULT: "ground_assault",
+        GROUND_FLAK: "ground_flak",
+        AIR: "air",
+      };
+      const TYPE_LABEL = {
+        [UNIT_TYPES.GROUND_ASSAULT]: "GA",
+        [UNIT_TYPES.GROUND_FLAK]: "GF",
+        [UNIT_TYPES.AIR]: "AIR",
+      };
+      const TYPE_DOMAIN = {
+        [UNIT_TYPES.GROUND_ASSAULT]: "GROUND",
+        [UNIT_TYPES.GROUND_FLAK]: "GROUND",
+        [UNIT_TYPES.AIR]: "AIR",
+      };
+      const TRIAD_WIN = {
+        [UNIT_TYPES.GROUND_ASSAULT]: UNIT_TYPES.GROUND_FLAK,
+        [UNIT_TYPES.GROUND_FLAK]: UNIT_TYPES.AIR,
+        [UNIT_TYPES.AIR]: UNIT_TYPES.GROUND_ASSAULT,
+      };
+      const DIRS = [
+        [1, 0],
+        [1, -1],
+        [0, -1],
+        [-1, 0],
+        [-1, 1],
+        [0, 1],
+      ];
+
+      const state = {
+        turn: 1,
+        activeSide: SIDES.PLAYER,
+        ap: TURN_AP,
+        mode: "strategy",
+        units: [],
+        control: new Map(),
+        selectedUnitId: null,
+        cursor: { q: 0, r: 0 },
+        hover: null,
+        battle: null,
+        winner: null,
+        rngSeed: 803211,
+        cpuNextActionAt: 0,
+      };
+
+      let audioCtx = null;
+      let audioEnabled = false;
+
+      function ensureAudio() {
+        if (!audioCtx) {
+          const AC = window.AudioContext || window.webkitAudioContext;
+          if (!AC) return false;
+          audioCtx = new AC();
+        }
+        if (audioCtx.state === "suspended") audioCtx.resume();
+        audioEnabled = true;
+        return true;
+      }
+
+      function playTone(type, freq, dur, volume, when = 0) {
+        if (!audioEnabled || !audioCtx) return;
+        const now = audioCtx.currentTime + when;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, now);
+        gain.gain.setValueAtTime(0.0001, now);
+        gain.gain.exponentialRampToValueAtTime(volume, now + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(now);
+        osc.stop(now + dur + 0.02);
+      }
+
+      function playClickSound() {
+        playTone("square", 980, 0.055, 0.045);
+      }
+
+      function playMoveSound() {
+        playTone("triangle", 760, 0.06, 0.05);
+      }
+
+      function playShotSound() {
+        playTone("sawtooth", 1500, 0.07, 0.04);
+      }
+
+      function playExplosionSound() {
+        if (!audioEnabled || !audioCtx) return;
+        const now = audioCtx.currentTime;
+        const bufferSize = Math.floor(audioCtx.sampleRate * 0.2);
+        const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+          const t = i / bufferSize;
+          data[i] = (Math.random() * 2 - 1) * (1 - t) * 0.55;
+        }
+        const src = audioCtx.createBufferSource();
+        const filter = audioCtx.createBiquadFilter();
+        const gain = audioCtx.createGain();
+        src.buffer = buffer;
+        filter.type = "lowpass";
+        filter.frequency.setValueAtTime(900, now);
+        gain.gain.setValueAtTime(0.0001, now);
+        gain.gain.exponentialRampToValueAtTime(0.18, now + 0.015);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.22);
+        src.connect(filter);
+        filter.connect(gain);
+        gain.connect(audioCtx.destination);
+        src.start(now);
+        src.stop(now + 0.24);
+      }
+
+      function keyOf(q, r) {
+        return `${q},${r}`;
+      }
+
+      function inBounds(q, r) {
+        return q >= 0 && q < BOARD_SIZE && r >= 0 && r < BOARD_SIZE;
+      }
+
+      function seededRand() {
+        state.rngSeed = (state.rngSeed * 1664525 + 1013904223) >>> 0;
+        return state.rngSeed / 4294967296;
+      }
+
+      function makeUnit(id, side, q, r, type) {
+        return { id, side, q, r, type, hp: 3, atk: 2, def: 1 };
+      }
+
+      function matchupBonus(attackerType, defenderType) {
+        if (TRIAD_WIN[attackerType] === defenderType) return 1;
+        if (TRIAD_WIN[defenderType] === attackerType) return -1;
+        return 0;
+      }
+
+      function resetGame() {
+        state.turn = 1;
+        state.activeSide = SIDES.PLAYER;
+        state.ap = TURN_AP;
+        state.mode = "strategy";
+        state.selectedUnitId = null;
+        state.cursor = { q: 0, r: 0 };
+        state.hover = null;
+        state.battle = null;
+        state.winner = null;
+        state.rngSeed = 803211;
+        state.control = new Map();
+        state.units = [];
+
+        const playerStarts = [
+          { q: 1, r: 1, type: UNIT_TYPES.GROUND_ASSAULT },
+          { q: 1, r: 2, type: UNIT_TYPES.GROUND_FLAK },
+          { q: 1, r: 4, type: UNIT_TYPES.AIR },
+          { q: 1, r: 5, type: UNIT_TYPES.GROUND_ASSAULT },
+          { q: 1, r: 6, type: UNIT_TYPES.GROUND_FLAK },
+          { q: 2, r: 3, type: UNIT_TYPES.AIR },
+        ];
+        const cpuStarts = [
+          { q: 2, r: 1, type: UNIT_TYPES.GROUND_FLAK },
+          { q: 4, r: 1, type: UNIT_TYPES.AIR },
+          { q: 5, r: 1, type: UNIT_TYPES.GROUND_ASSAULT },
+          { q: 6, r: 1, type: UNIT_TYPES.GROUND_FLAK },
+          { q: 7, r: 1, type: UNIT_TYPES.AIR },
+          { q: 3, r: 2, type: UNIT_TYPES.GROUND_ASSAULT },
+        ];
+
+        let idx = 0;
+        for (const s of playerStarts) {
+          const u = makeUnit(`p${idx++}`, SIDES.PLAYER, s.q, s.r, s.type);
+          state.units.push(u);
+          state.control.set(keyOf(s.q, s.r), SIDES.PLAYER);
+        }
+        idx = 0;
+        for (const s of cpuStarts) {
+          const u = makeUnit(`c${idx++}`, SIDES.CPU, s.q, s.r, s.type);
+          state.units.push(u);
+          state.control.set(keyOf(s.q, s.r), SIDES.CPU);
+        }
+
+        updateHud("READY");
+      }
+
+      function axialToPixel(q, r) {
+        const x = HEX_SIZE * Math.sqrt(3) * (q + r * 0.5);
+        const y = HEX_SIZE * 1.5 * r;
+        return { x, y };
+      }
+
+      function boardOrigin() {
+        const topLeft = axialToPixel(0, 0);
+        const bottomRight = axialToPixel(BOARD_SIZE - 1, BOARD_SIZE - 1);
+        const width = bottomRight.x - topLeft.x + HEX_SIZE * Math.sqrt(3);
+        const height = bottomRight.y - topLeft.y + HEX_SIZE * 2;
+        return {
+          x: canvas.width * 0.5 - width * 0.5 + HEX_SIZE,
+          y: canvas.height * 0.5 - height * 0.5 + HEX_SIZE * 0.6,
+        };
+      }
+
+      function cellCenter(q, r) {
+        const o = boardOrigin();
+        const p = axialToPixel(q, r);
+        return { x: o.x + p.x, y: o.y + p.y };
+      }
+
+      function unitAt(q, r) {
+        return state.units.find((u) => u.q === q && u.r === r);
+      }
+
+      function occupiedBy(q, r, side) {
+        const u = unitAt(q, r);
+        return !!u && u.side === side;
+      }
+
+      function neighbors(q, r) {
+        const out = [];
+        for (const [dq, dr] of DIRS) {
+          const nq = q + dq;
+          const nr = r + dr;
+          if (inBounds(nq, nr)) out.push({ q: nq, r: nr });
+        }
+        return out;
+      }
+
+      function getUnitById(id) {
+        return state.units.find((u) => u.id === id) || null;
+      }
+
+      function getUnits(side) {
+        return state.units.filter((u) => u.side === side);
+      }
+
+      function validMoves(unit) {
+        return neighbors(unit.q, unit.r).filter((c) => !unitAt(c.q, c.r));
+      }
+
+      function validAttacks(unit) {
+        return neighbors(unit.q, unit.r)
+          .map((c) => unitAt(c.q, c.r))
+          .filter((u) => u && u.side !== unit.side);
+      }
+
+      function distanceToGoal(side, q, r) {
+        return side === SIDES.PLAYER ? BOARD_SIZE - 1 - q : BOARD_SIZE - 1 - r;
+      }
+
+      function damageAgainst(attacker, defender) {
+        return Math.max(1, attacker.atk - defender.def + matchupBonus(attacker.type, defender.type));
+      }
+
+      function canAct(side) {
+        const units = getUnits(side);
+        if (units.length === 0) return false;
+        for (const u of units) {
+          if (validMoves(u).length > 0 || validAttacks(u).length > 0) return true;
+        }
+        return false;
+      }
+
+      function hasConnection(side) {
+        const passable = new Set();
+        for (let q = 0; q < BOARD_SIZE; q++) {
+          for (let r = 0; r < BOARD_SIZE; r++) {
+            const k = keyOf(q, r);
+            if (state.control.get(k) === side || occupiedBy(q, r, side)) {
+              passable.add(k);
+            }
+          }
+        }
+        const queue = [];
+        const seen = new Set();
+        if (side === SIDES.PLAYER) {
+          for (let r = 0; r < BOARD_SIZE; r++) {
+            const k = keyOf(0, r);
+            if (passable.has(k)) {
+              queue.push({ q: 0, r });
+              seen.add(k);
+            }
+          }
+        } else {
+          for (let q = 0; q < BOARD_SIZE; q++) {
+            const k = keyOf(q, 0);
+            if (passable.has(k)) {
+              queue.push({ q, r: 0 });
+              seen.add(k);
+            }
+          }
+        }
+
+        while (queue.length) {
+          const cur = queue.shift();
+          if (side === SIDES.PLAYER && cur.q === BOARD_SIZE - 1) return true;
+          if (side === SIDES.CPU && cur.r === BOARD_SIZE - 1) return true;
+          for (const n of neighbors(cur.q, cur.r)) {
+            const nk = keyOf(n.q, n.r);
+            if (!passable.has(nk) || seen.has(nk)) continue;
+            seen.add(nk);
+            queue.push(n);
+          }
+        }
+        return false;
+      }
+
+      function connectionPotential(side) {
+        let score = 0;
+        for (let q = 0; q < BOARD_SIZE; q++) {
+          for (let r = 0; r < BOARD_SIZE; r++) {
+            if (occupiedBy(q, r, side) || state.control.get(keyOf(q, r)) === side) {
+              score += 1;
+              score += side === SIDES.PLAYER ? q * 0.15 : r * 0.15;
+            }
+          }
+        }
+        return score;
+      }
+
+      function checkWinner() {
+        if (hasConnection(SIDES.PLAYER)) {
+          state.winner = SIDES.PLAYER;
+          return true;
+        }
+        if (hasConnection(SIDES.CPU)) {
+          state.winner = SIDES.CPU;
+          return true;
+        }
+        if (getUnits(SIDES.PLAYER).length === 0 || !canAct(SIDES.PLAYER)) {
+          state.winner = SIDES.CPU;
+          return true;
+        }
+        if (getUnits(SIDES.CPU).length === 0 || !canAct(SIDES.CPU)) {
+          state.winner = SIDES.PLAYER;
+          return true;
+        }
+        if (state.turn > MAX_TURNS) {
+          state.winner =
+            connectionPotential(SIDES.PLAYER) >= connectionPotential(SIDES.CPU)
+              ? SIDES.PLAYER
+              : SIDES.CPU;
+          return true;
+        }
+        return false;
+      }
+
+      function consumeAp() {
+        state.ap -= 1;
+        if (state.ap <= 0) endTurn();
+      }
+
+      function moveUnit(unit, q, r) {
+        unit.q = q;
+        unit.r = r;
+        state.control.set(keyOf(q, r), unit.side);
+        playMoveSound();
+        updateHud("MOVE CONFIRMED");
+        consumeAp();
+      }
+
+      function startBattle(attacker, defender) {
+        const damage = damageAgainst(attacker, defender);
+        const willKill = damage >= defender.hp;
+        const counter = willKill ? 0 : Math.max(1, damageAgainst(defender, attacker) - 1);
+        const defenderHpAfter = defender.hp - damage;
+        const attackerHpAfter = attacker.hp - counter;
+        state.mode = "battle";
+        state.battle = {
+          attackerId: attacker.id,
+          defenderId: defender.id,
+          attackerType: attacker.type,
+          defenderType: defender.type,
+          damage,
+          counter,
+          willDefenderDie: defenderHpAfter <= 0,
+          willAttackerDie: attackerHpAfter <= 0,
+          defenderDodge: !willKill && seededRand() < 0.55,
+          attackerDodge: counter > 0 && seededRand() < 0.55,
+          audio: {
+            attackShotsPlayed: 0,
+            counterShotsPlayed: 0,
+            attackerHitPlayed: false,
+            defenderHitPlayed: false,
+            attackerDownPlayed: false,
+            defenderDownPlayed: false,
+          },
+          startAt: performance.now(),
+          duration: BATTLE_DURATION,
+        };
+        updateHud("ASSAULT ENGAGED");
+      }
+
+      function resolveBattle() {
+        const battle = state.battle;
+        if (!battle) return;
+        const attacker = getUnitById(battle.attackerId);
+        const defender = getUnitById(battle.defenderId);
+
+        if (attacker && defender) {
+          defender.hp -= battle.damage;
+          if (defender.hp <= 0) {
+            state.units = state.units.filter((u) => u.id !== defender.id);
+          } else {
+            attacker.hp -= battle.counter;
+            if (attacker.hp <= 0) {
+              state.units = state.units.filter((u) => u.id !== attacker.id);
+            }
+          }
+        }
+
+        state.mode = "strategy";
+        state.battle = null;
+        consumeAp();
+      }
+
+      function endTurn() {
+        if (checkWinner()) return;
+        state.selectedUnitId = null;
+        state.activeSide = state.activeSide === SIDES.PLAYER ? SIDES.CPU : SIDES.PLAYER;
+        state.ap = TURN_AP;
+        if (state.activeSide === SIDES.PLAYER) {
+          state.turn += 1;
+          updateHud("YOUR TURN");
+        } else {
+          state.cpuNextActionAt = performance.now() + 450;
+          updateHud("CPU TURN");
+        }
+        checkWinner();
+      }
+
+      function cellFromPoint(x, y) {
+        let best = null;
+        let bestD = Infinity;
+        for (let q = 0; q < BOARD_SIZE; q++) {
+          for (let r = 0; r < BOARD_SIZE; r++) {
+            const c = cellCenter(q, r);
+            const dx = x - c.x;
+            const dy = y - c.y;
+            const d = Math.hypot(dx, dy);
+            if (d < bestD) {
+              bestD = d;
+              best = { q, r };
+            }
+          }
+        }
+        return bestD <= HEX_SIZE * 0.95 ? best : null;
+      }
+
+      function selectedUnit() {
+        return getUnitById(state.selectedUnitId);
+      }
+
+      function trySelectAt(q, r) {
+        const u = unitAt(q, r);
+        if (u && u.side === state.activeSide && state.activeSide === SIDES.PLAYER) {
+          state.selectedUnitId = u.id;
+          state.cursor = { q, r };
+          playClickSound();
+          updateHud("UNIT SELECTED");
+          return true;
+        }
+        return false;
+      }
+
+      function tryActAt(q, r) {
+        if (state.mode !== "strategy" || state.winner || state.activeSide !== SIDES.PLAYER) return;
+        const unit = selectedUnit();
+        if (!unit) {
+          trySelectAt(q, r);
+          return;
+        }
+        if (unit.q === q && unit.r === r) return;
+
+        const moveOk = validMoves(unit).some((m) => m.q === q && m.r === r);
+        if (moveOk) {
+          moveUnit(unit, q, r);
+          return;
+        }
+
+        const target = unitAt(q, r);
+        if (target && target.side !== unit.side) {
+          const attackOk = validAttacks(unit).some((e) => e.id === target.id);
+          if (attackOk) {
+            startBattle(unit, target);
+            return;
+          }
+        }
+        trySelectAt(q, r);
+      }
+
+      function cpuAttackChoice() {
+        let best = null;
+        for (const u of getUnits(SIDES.CPU)) {
+          for (const e of validAttacks(u)) {
+            const damage = damageAgainst(u, e);
+            if (damage < e.hp) continue;
+            const score = 100 + (3 - u.hp) * -1 + seededRand() * 0.01;
+            if (!best || score > best.score) {
+              best = { attacker: u, defender: e, score };
+            }
+          }
+        }
+        return best;
+      }
+
+      function cpuMoveChoice() {
+        let best = null;
+        for (const u of getUnits(SIDES.CPU)) {
+          for (const m of validMoves(u)) {
+            let score = -distanceToGoal(SIDES.CPU, m.q, m.r);
+            const nearEnemy = neighbors(m.q, m.r).some((n) => occupiedBy(n.q, n.r, SIDES.PLAYER));
+            if (nearEnemy) score += 0.35;
+            score += seededRand() * 0.01;
+            if (!best || score > best.score) {
+              best = { unit: u, q: m.q, r: m.r, score };
+            }
+          }
+        }
+        return best;
+      }
+
+      function cpuFallbackAttack() {
+        let best = null;
+        for (const u of getUnits(SIDES.CPU)) {
+          for (const e of validAttacks(u)) {
+            const score = damageAgainst(u, e) + seededRand() * 0.01;
+            if (!best || score > best.score) best = { attacker: u, defender: e, score };
+          }
+        }
+        return best;
+      }
+
+      function cpuStep(now) {
+        if (state.winner || state.mode !== "strategy" || state.activeSide !== SIDES.CPU) return;
+        if (now < state.cpuNextActionAt) return;
+
+        const killShot = cpuAttackChoice();
+        if (killShot) {
+          startBattle(killShot.attacker, killShot.defender);
+          state.cpuNextActionAt = now + 420;
+          return;
+        }
+
+        const mv = cpuMoveChoice();
+        if (mv) {
+          moveUnit(mv.unit, mv.q, mv.r);
+          state.cpuNextActionAt = now + 420;
+          return;
+        }
+
+        const fallback = cpuFallbackAttack();
+        if (fallback) {
+          startBattle(fallback.attacker, fallback.defender);
+          state.cpuNextActionAt = now + 420;
+          return;
+        }
+
+        endTurn();
+      }
+
+      function drawHex(cx, cy, lineColor, fillColor) {
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+          const a = (Math.PI / 180) * (60 * i - 30);
+          const x = cx + Math.cos(a) * HEX_SIZE;
+          const y = cy + Math.sin(a) * HEX_SIZE;
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        if (fillColor) {
+          ctx.fillStyle = fillColor;
+          ctx.fill();
+        }
+        ctx.strokeStyle = lineColor;
+        ctx.lineWidth = 1.25;
+        ctx.stroke();
+      }
+
+      function drawUnit(unit, cx, cy) {
+        ctx.save();
+        ctx.translate(cx, cy);
+        const stroke = unit.side === SIDES.PLAYER ? "#68ffd6" : "#ff8f8f";
+        ctx.strokeStyle = stroke;
+        ctx.fillStyle = stroke;
+        ctx.lineWidth = 2.2;
+        const radius = 10 + unit.hp * 2;
+        if (unit.type === UNIT_TYPES.AIR) {
+          ctx.beginPath();
+          ctx.moveTo(0, -radius * 0.9);
+          ctx.lineTo(radius * 0.9, radius * 0.8);
+          ctx.lineTo(-radius * 0.9, radius * 0.8);
+          ctx.closePath();
+          ctx.stroke();
+          ctx.setLineDash([3, 4]);
+          ctx.beginPath();
+          ctx.arc(0, 0, radius * 1.15, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        } else if (unit.type === UNIT_TYPES.GROUND_FLAK) {
+          ctx.strokeRect(-radius * 0.75, -radius * 0.75, radius * 1.5, radius * 1.5);
+          ctx.beginPath();
+          ctx.moveTo(-radius * 0.8, 0);
+          ctx.lineTo(radius * 0.8, 0);
+          ctx.moveTo(0, -radius * 0.8);
+          ctx.lineTo(0, radius * 0.8);
+          ctx.stroke();
+        } else {
+          ctx.beginPath();
+          ctx.moveTo(0, -radius);
+          ctx.lineTo(radius * 0.9, 0);
+          ctx.lineTo(0, radius);
+          ctx.lineTo(-radius * 0.9, 0);
+          ctx.closePath();
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.arc(0, 0, radius * 0.42, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        ctx.font = "700 9px IBM Plex Mono, monospace";
+        ctx.textAlign = "center";
+        ctx.fillText(TYPE_LABEL[unit.type], 0, radius + 12);
+        ctx.restore();
+      }
+
+      function drawScanlines(alpha) {
+        ctx.save();
+        ctx.strokeStyle = `rgba(89,255,159,${alpha})`;
+        ctx.lineWidth = 1;
+        for (let y = 0; y < canvas.height; y += 3) {
+          ctx.beginPath();
+          ctx.moveTo(0, y + 0.5);
+          ctx.lineTo(canvas.width, y + 0.5);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      function renderStrategy() {
+        ctx.fillStyle = "#031008";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        for (let q = 0; q < BOARD_SIZE; q++) {
+          for (let r = 0; r < BOARD_SIZE; r++) {
+            const c = cellCenter(q, r);
+            const control = state.control.get(keyOf(q, r));
+            const fill =
+              control === SIDES.PLAYER
+                ? "rgba(40,200,155,0.10)"
+                : control === SIDES.CPU
+                ? "rgba(210,90,90,0.10)"
+                : "rgba(0,0,0,0)";
+            drawHex(c.x, c.y, "rgba(89,255,159,0.55)", fill);
+          }
+        }
+
+        const sel = selectedUnit();
+        if (sel) {
+          for (const m of validMoves(sel)) {
+            const c = cellCenter(m.q, m.r);
+            drawHex(c.x, c.y, "rgba(134,255,217,0.85)", "rgba(85,225,180,0.20)");
+          }
+          for (const e of validAttacks(sel)) {
+            const c = cellCenter(e.q, e.r);
+            drawHex(c.x, c.y, "rgba(255,120,120,0.9)", "rgba(255,80,80,0.20)");
+          }
+        }
+
+        for (const u of state.units) {
+          const c = cellCenter(u.q, u.r);
+          drawUnit(u, c.x, c.y);
+        }
+
+        if (sel) {
+          const c = cellCenter(sel.q, sel.r);
+          drawHex(c.x, c.y, "rgba(255,255,255,0.9)", "rgba(255,255,255,0.08)");
+        }
+        if (state.hover) {
+          const c = cellCenter(state.hover.q, state.hover.r);
+          drawHex(c.x, c.y, "rgba(255,255,255,0.55)", null);
+        }
+        if (state.cursor) {
+          const c = cellCenter(state.cursor.q, state.cursor.r);
+          drawHex(c.x, c.y, "rgba(134,255,217,0.45)", null);
+        }
+
+        drawScanlines(0.035);
+      }
+
+      function drawWirePoly(points, stroke) {
+        ctx.strokeStyle = stroke;
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        points.forEach((p, i) => {
+          if (i === 0) ctx.moveTo(p.x, p.y);
+          else ctx.lineTo(p.x, p.y);
+        });
+        ctx.closePath();
+        ctx.stroke();
+      }
+
+      function lerp(a, b, t) {
+        return a + (b - a) * t;
+      }
+
+      function clamp01(v) {
+        return Math.max(0, Math.min(1, v));
+      }
+
+      function drawFighter(x, y, scale, facing, color, dodgeOffset, unitType, flightBob = 0) {
+        ctx.save();
+        const isAir = unitType === UNIT_TYPES.AIR;
+        ctx.translate(x, y + dodgeOffset + (isAir ? flightBob : 0));
+        ctx.scale(scale * facing, scale);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.6;
+
+        if (isAir) {
+          ctx.beginPath();
+          ctx.moveTo(0.85, 0);
+          ctx.lineTo(-0.2, -0.24);
+          ctx.lineTo(-0.62, 0);
+          ctx.lineTo(-0.2, 0.24);
+          ctx.closePath();
+          ctx.stroke();
+
+          ctx.beginPath();
+          ctx.moveTo(-0.05, 0);
+          ctx.lineTo(-0.52, -0.5);
+          ctx.moveTo(-0.05, 0);
+          ctx.lineTo(-0.52, 0.5);
+          ctx.moveTo(0.2, 0);
+          ctx.lineTo(-0.04, -0.16);
+          ctx.moveTo(0.2, 0);
+          ctx.lineTo(-0.04, 0.16);
+          ctx.stroke();
+
+          ctx.strokeStyle = "rgba(255,220,120,0.65)";
+          ctx.beginPath();
+          ctx.moveTo(-0.66, -0.08);
+          ctx.lineTo(-0.95, 0);
+          ctx.lineTo(-0.66, 0.08);
+          ctx.stroke();
+        } else {
+          const isFlak = unitType === UNIT_TYPES.GROUND_FLAK;
+          ctx.beginPath();
+          ctx.moveTo(0.72, 0.2);
+          ctx.lineTo(0.34, -0.25);
+          ctx.lineTo(-0.58, -0.25);
+          ctx.lineTo(-0.72, 0.2);
+          ctx.closePath();
+          ctx.stroke();
+
+          ctx.beginPath();
+          if (isFlak) {
+            ctx.moveTo(-0.06, -0.02);
+            ctx.lineTo(0.4, -0.48);
+            ctx.moveTo(0.07, -0.02);
+            ctx.lineTo(0.52, -0.36);
+          } else {
+            ctx.moveTo(-0.08, -0.02);
+            ctx.lineTo(0.48, -0.2);
+          }
+          ctx.stroke();
+
+          ctx.strokeStyle = "rgba(255,255,255,0.3)";
+          ctx.beginPath();
+          ctx.moveTo(-0.62, 0.22);
+          ctx.lineTo(-0.16, 0.22);
+          ctx.moveTo(-0.62, 0.28);
+          ctx.lineTo(-0.16, 0.28);
+          ctx.stroke();
+        }
+
+        ctx.restore();
+      }
+
+      function drawProjectile(x, y, angle, speedAlpha, color) {
+        const len = 18 + speedAlpha * 18;
+        const dx = Math.cos(angle) * len;
+        const dy = Math.sin(angle) * len;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(x - dx * 0.5, y - dy * 0.5);
+        ctx.lineTo(x + dx * 0.5, y + dy * 0.5);
+        ctx.stroke();
+      }
+
+      function drawExplosion(x, y, radius, alpha) {
+        ctx.strokeStyle = `rgba(255,210,160,${alpha})`;
+        ctx.lineWidth = 1.6;
+        for (let i = 0; i < 3; i++) {
+          const r = radius * (0.55 + i * 0.32);
+          ctx.beginPath();
+          ctx.arc(x, y, r, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        for (let i = 0; i < 7; i++) {
+          const a = i * ((Math.PI * 2) / 7);
+          ctx.beginPath();
+          ctx.moveTo(x + Math.cos(a) * radius * 0.3, y + Math.sin(a) * radius * 0.3);
+          ctx.lineTo(x + Math.cos(a) * radius * 1.2, y + Math.sin(a) * radius * 1.2);
+          ctx.stroke();
+        }
+      }
+
+      function renderBattle(now) {
+        const b = state.battle;
+        if (!b) return;
+        const t = Math.min(1, (now - b.startAt) / b.duration);
+
+        ctx.fillStyle = "#000";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        const horizon = canvas.height * 0.36;
+        ctx.strokeStyle = "rgba(89,255,159,0.35)";
+        for (let i = 0; i < 11; i++) {
+          const y = horizon + ((canvas.height - horizon) * i) / 10;
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.lineTo(canvas.width, y);
+          ctx.stroke();
+        }
+        for (let i = -8; i <= 8; i++) {
+          const x = canvas.width * 0.5 + i * 90;
+          ctx.beginPath();
+          ctx.moveTo(x, canvas.height);
+          ctx.lineTo(canvas.width * 0.5 + i * 24, horizon);
+          ctx.stroke();
+        }
+
+        const phaseApproach = clamp01(t / 0.2);
+        const phaseAttack = clamp01((t - 0.2) / 0.33);
+        const phaseCounter = clamp01((t - 0.56) / 0.28);
+        const phaseResolve = clamp01((t - 0.84) / 0.16);
+
+        const baseY = canvas.height * (0.64 - phaseApproach * 0.12);
+        const leftX = lerp(canvas.width * 0.2, canvas.width * 0.33, phaseApproach);
+        const rightX = lerp(canvas.width * 0.8, canvas.width * 0.67, phaseApproach);
+        const shipScale = lerp(125, 210, phaseApproach) / 100;
+        const attackerIsAir = b.attackerType === UNIT_TYPES.AIR;
+        const defenderIsAir = b.defenderType === UNIT_TYPES.AIR;
+        const attackerBaseY = baseY + (attackerIsAir ? -76 : 28);
+        const defenderBaseY = baseY + (defenderIsAir ? -76 : 28);
+
+        let defenderDodgeOffset = 0;
+        if (b.defenderDodge && phaseAttack > 0.15 && phaseAttack < 0.78) {
+          defenderDodgeOffset = (defenderIsAir ? -1 : 1) * -Math.sin((phaseAttack - 0.15) * Math.PI * 1.6) * 34;
+        }
+        let attackerDodgeOffset = 0;
+        if (b.attackerDodge && phaseCounter > 0.12 && phaseCounter < 0.8) {
+          attackerDodgeOffset = (attackerIsAir ? -1 : 1) * Math.sin((phaseCounter - 0.12) * Math.PI * 1.5) * 30;
+        }
+
+        if (!attackerIsAir || !defenderIsAir) {
+          ctx.strokeStyle = "rgba(89,255,159,0.22)";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(canvas.width * 0.08, baseY + 34);
+          ctx.lineTo(canvas.width * 0.92, baseY + 34);
+          ctx.stroke();
+        }
+
+        const attackerBob = attackerIsAir ? Math.sin(t * 18 + 0.6) * 8 : Math.sin(t * 22) * 1.5;
+        const defenderBob = defenderIsAir ? Math.sin(t * 18 + 2.2) * 8 : Math.sin(t * 22 + 1.1) * 1.5;
+
+        drawFighter(
+          leftX,
+          attackerBaseY,
+          shipScale,
+          1,
+          "rgba(104,255,214,0.95)",
+          attackerDodgeOffset,
+          b.attackerType,
+          attackerBob
+        );
+        drawFighter(
+          rightX,
+          defenderBaseY,
+          shipScale,
+          -1,
+          "rgba(255,130,130,0.95)",
+          defenderDodgeOffset,
+          b.defenderType,
+          defenderBob
+        );
+
+        if (phaseAttack > 0.01) {
+          const rounds = 4;
+          for (let i = 0; i < rounds; i++) {
+            const shotT = phaseAttack * 1.45 - i * 0.22;
+            if (shotT <= 0 || shotT >= 1.04) continue;
+            const p = clamp01(shotT);
+            const miss = b.defenderDodge && i < 2;
+            const attackArc = attackerIsAir ? Math.sin(p * Math.PI) * -20 : 0;
+            const targetY = defenderBaseY + defenderBob + (miss ? (defenderIsAir ? -64 : 46) : defenderDodgeOffset);
+            const x = lerp(leftX + 34, rightX - 34, p);
+            const y = lerp(attackerBaseY + attackerBob - 4, targetY, p) + attackArc;
+            drawProjectile(x, y, 0, 0.6 + p * 0.4, "rgba(130,255,220,0.95)");
+          }
+        }
+
+        if (phaseCounter > 0.04 && b.counter > 0) {
+          const rounds = 3;
+          for (let i = 0; i < rounds; i++) {
+            const shotT = phaseCounter * 1.35 - i * 0.26;
+            if (shotT <= 0 || shotT >= 1.05) continue;
+            const p = clamp01(shotT);
+            const miss = b.attackerDodge && i === 0;
+            const counterArc = defenderIsAir ? Math.sin(p * Math.PI) * -16 : 0;
+            const targetY = attackerBaseY + attackerBob + (miss ? (attackerIsAir ? 64 : 54) : attackerDodgeOffset);
+            const x = lerp(rightX - 34, leftX + 34, p);
+            const y = lerp(defenderBaseY + defenderBob + 4, targetY, p) + counterArc;
+            drawProjectile(x, y, Math.PI, 0.55 + p * 0.45, "rgba(255,170,150,0.95)");
+          }
+        }
+
+        if (phaseAttack > 0.72) {
+          const hitAlpha = clamp01((phaseAttack - 0.72) / 0.28);
+          if (!b.defenderDodge || b.damage > 1) {
+            drawExplosion(
+              rightX - 6,
+              defenderBaseY + defenderBob + defenderDodgeOffset,
+              12 + hitAlpha * 42,
+              0.75 - hitAlpha * 0.3
+            );
+          }
+          if (b.willDefenderDie && phaseResolve > 0.05) {
+            drawExplosion(
+              rightX - 10,
+              defenderBaseY + defenderBob + defenderDodgeOffset,
+              44 + phaseResolve * 52,
+              0.95 - phaseResolve * 0.75
+            );
+          }
+        }
+
+        if (phaseCounter > 0.72 && b.counter > 0) {
+          const hitAlpha = clamp01((phaseCounter - 0.72) / 0.28);
+          if (!b.attackerDodge || b.counter > 1) {
+            drawExplosion(
+              leftX + 6,
+              attackerBaseY + attackerBob + attackerDodgeOffset,
+              10 + hitAlpha * 34,
+              0.68 - hitAlpha * 0.28
+            );
+          }
+          if (b.willAttackerDie && phaseResolve > 0.05) {
+            drawExplosion(
+              leftX + 10,
+              attackerBaseY + attackerBob + attackerDodgeOffset,
+              38 + phaseResolve * 48,
+              0.9 - phaseResolve * 0.7
+            );
+          }
+        }
+
+        if (t > 0.9) {
+          const flash = Math.max(0, 1 - (t - 0.9) / 0.1);
+          ctx.fillStyle = `rgba(255,255,255,${flash * 0.38})`;
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+
+        ctx.fillStyle = "rgba(140,255,220,0.95)";
+        ctx.font = "700 24px IBM Plex Mono, monospace";
+        ctx.textAlign = "center";
+        ctx.fillText("ASSAULT VECTOR", canvas.width * 0.5, canvas.height * 0.15);
+        ctx.font = "600 16px IBM Plex Mono, monospace";
+        ctx.fillText(
+          `DMG ${b.damage} / COUNTER ${b.counter} / EVADE ${b.defenderDodge ? "ON" : "OFF"}`,
+          canvas.width * 0.5,
+          canvas.height * 0.22
+        );
+        ctx.font = "600 14px IBM Plex Mono, monospace";
+        ctx.fillText(
+          `${TYPE_LABEL[b.attackerType]}(${TYPE_DOMAIN[b.attackerType]}) VS ${TYPE_LABEL[b.defenderType]}(${TYPE_DOMAIN[b.defenderType]})`,
+          canvas.width * 0.5,
+          canvas.height * 0.27
+        );
+
+        drawScanlines(0.06);
+      }
+
+      function processBattleAudio(now) {
+        const b = state.battle;
+        if (!b || !b.audio || !audioEnabled) return;
+        const t = Math.min(1, (now - b.startAt) / b.duration);
+        const phaseAttack = clamp01((t - 0.2) / 0.33);
+        const phaseCounter = clamp01((t - 0.56) / 0.28);
+        const attackShotsTarget = Math.max(0, Math.min(4, Math.floor(phaseAttack * 4.2)));
+        const counterShotsTarget =
+          b.counter > 0 ? Math.max(0, Math.min(3, Math.floor(phaseCounter * 3.2))) : 0;
+
+        while (b.audio.attackShotsPlayed < attackShotsTarget) {
+          playShotSound();
+          b.audio.attackShotsPlayed += 1;
+        }
+        while (b.audio.counterShotsPlayed < counterShotsTarget) {
+          playShotSound();
+          b.audio.counterShotsPlayed += 1;
+        }
+
+        if (!b.audio.defenderHitPlayed && phaseAttack > 0.74 && (!b.defenderDodge || b.damage > 1)) {
+          playExplosionSound();
+          b.audio.defenderHitPlayed = true;
+        }
+        if (
+          !b.audio.attackerHitPlayed &&
+          phaseCounter > 0.74 &&
+          b.counter > 0 &&
+          (!b.attackerDodge || b.counter > 1)
+        ) {
+          playExplosionSound();
+          b.audio.attackerHitPlayed = true;
+        }
+        if (!b.audio.defenderDownPlayed && b.willDefenderDie && t > 0.9) {
+          playExplosionSound();
+          b.audio.defenderDownPlayed = true;
+        }
+        if (!b.audio.attackerDownPlayed && b.willAttackerDie && t > 0.9) {
+          playExplosionSound();
+          b.audio.attackerDownPlayed = true;
+        }
+      }
+
+      function updateHud(message) {
+        hudTurn.textContent = String(state.turn);
+        hudSide.textContent = state.activeSide === SIDES.PLAYER ? "PLAYER" : "CPU";
+        hudAp.textContent = String(Math.max(0, state.ap));
+        hudPCount.textContent = String(getUnits(SIDES.PLAYER).length);
+        hudCCount.textContent = String(getUnits(SIDES.CPU).length);
+        hudMode.textContent = state.mode === "battle" ? "BATTLE" : "STRATEGY";
+        if (state.winner) {
+          hudStatus.textContent = state.winner === SIDES.PLAYER ? "VICTORY" : "DEFEAT";
+          hudStatus.className = state.winner === SIDES.PLAYER ? "" : "warn";
+        } else {
+          hudStatus.textContent = message || "READY";
+          hudStatus.className = "";
+        }
+      }
+
+      function step(now) {
+        if (state.mode === "battle" && state.battle) {
+          processBattleAudio(now);
+          if (now - state.battle.startAt >= state.battle.duration) {
+            resolveBattle();
+            checkWinner();
+            updateHud("BATTLE RESOLVED");
+          }
+        } else {
+          cpuStep(now);
+        }
+
+        if (state.mode === "battle") renderBattle(now);
+        else renderStrategy();
+
+        updateHud(hudStatus.textContent);
+        requestAnimationFrame(step);
+      }
+
+      function resize() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+      }
+
+      canvas.addEventListener("mousemove", (event) => {
+        const rect = canvas.getBoundingClientRect();
+        state.hover = cellFromPoint(event.clientX - rect.left, event.clientY - rect.top);
+      });
+
+      canvas.addEventListener("click", (event) => {
+        ensureAudio();
+        if (state.activeSide !== SIDES.PLAYER || state.mode !== "strategy") return;
+        const rect = canvas.getBoundingClientRect();
+        const cell = cellFromPoint(event.clientX - rect.left, event.clientY - rect.top);
+        if (!cell) return;
+        state.cursor = { ...cell };
+        tryActAt(cell.q, cell.r);
+      });
+
+      window.addEventListener("keydown", (event) => {
+        ensureAudio();
+        if (event.code === "KeyR") {
+          resetGame();
+          return;
+        }
+        if (state.winner) return;
+        if (
+          event.code === "KeyE" &&
+          state.mode === "strategy" &&
+          state.activeSide === SIDES.PLAYER
+        ) {
+          endTurn();
+          return;
+        }
+        if (state.activeSide !== SIDES.PLAYER || state.mode !== "strategy") return;
+
+        let moved = false;
+        if (event.code === "ArrowRight" || event.code === "KeyD") {
+          state.cursor.q = Math.min(BOARD_SIZE - 1, state.cursor.q + 1);
+          moved = true;
+        } else if (event.code === "ArrowLeft" || event.code === "KeyA") {
+          state.cursor.q = Math.max(0, state.cursor.q - 1);
+          moved = true;
+        } else if (event.code === "ArrowUp" || event.code === "KeyW") {
+          state.cursor.r = Math.max(0, state.cursor.r - 1);
+          moved = true;
+        } else if (event.code === "ArrowDown" || event.code === "KeyS") {
+          state.cursor.r = Math.min(BOARD_SIZE - 1, state.cursor.r + 1);
+          moved = true;
+        } else if (event.code === "KeyQ") {
+          state.cursor.q = Math.max(0, state.cursor.q - 1);
+          state.cursor.r = Math.max(0, state.cursor.r - 1);
+          moved = true;
+        } else if (event.code === "KeyC") {
+          state.cursor.q = Math.min(BOARD_SIZE - 1, state.cursor.q + 1);
+          state.cursor.r = Math.min(BOARD_SIZE - 1, state.cursor.r + 1);
+          moved = true;
+        } else if (event.code === "Enter" || event.code === "Space") {
+          tryActAt(state.cursor.q, state.cursor.r);
+        }
+        if (moved) {
+          state.hover = { ...state.cursor };
+          playClickSound();
+        }
+      });
+
+      window.addEventListener("resize", resize);
+      resize();
+      resetGame();
+      requestAnimationFrame(step);
+    </script>
+  </body>
+</html>

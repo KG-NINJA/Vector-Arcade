@@ -1,0 +1,817 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Vector Orb Fall</title>
+    <style>
+      :root {
+        --bg: #020603;
+        --line: #58ff96;
+        --line2: #8bffd5;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: var(--bg);
+        color: var(--line);
+        font-family: monospace;
+      }
+      #game {
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+      #hud {
+        position: fixed;
+        top: 10px;
+        left: 10px;
+        border: 1px solid rgba(88, 255, 150, 0.7);
+        background: rgba(0, 20, 10, 0.6);
+        padding: 8px 10px;
+        font-size: 12px;
+        line-height: 1.45;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        pointer-events: none;
+        text-shadow: 0 0 8px rgba(88, 255, 150, 0.6);
+      }
+      #help {
+        position: fixed;
+        right: 10px;
+        bottom: 10px;
+        border: 1px solid rgba(139, 255, 213, 0.5);
+        background: rgba(0, 12, 7, 0.65);
+        color: var(--line2);
+        padding: 8px 10px;
+        font-size: 11px;
+        line-height: 1.4;
+        text-transform: uppercase;
+        pointer-events: none;
+      }
+      .warn {
+        color: #ff8686;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="game"></canvas>
+    <div id="hud">
+      VECTOR ORB FALL<br />
+      SCORE: <span id="score">0</span><br />
+      CHAIN: <span id="chain">0</span><br />
+      LEVEL: <span id="level">1</span><br />
+      TIME: <span id="time">00:00</span><br />
+      MODE: <span id="mode">PLAY</span><br />
+      <span id="status">READY</span>
+    </div>
+    <div id="help">
+      LEFT/RIGHT MOVE · DOWN SOFT DROP<br />
+      Z/X ROTATE · SPACE HARD DROP<br />
+      P PAUSE · R RESTART
+    </div>
+
+    <script>
+      const canvas = document.getElementById("game");
+      const ctx = canvas.getContext("2d");
+
+      const hudScore = document.getElementById("score");
+      const hudChain = document.getElementById("chain");
+      const hudLevel = document.getElementById("level");
+      const hudTime = document.getElementById("time");
+      const hudMode = document.getElementById("mode");
+      const hudStatus = document.getElementById("status");
+
+      const COLS = 6;
+      const ROWS = 12;
+      const COLORS = ["#57f7ff", "#7dff66", "#ffd35a", "#ff6ca8"];
+      const BASE_GRAVITY_MS = 800;
+      const SOFT_GRAVITY_MS = 40;
+      const MIN_GRAVITY_MS = 120;
+      const SPEED_STEP_MS = 40;
+      const SPEED_STEP_TIME_MS = 30000;
+      const LOCK_DELAY_MS = 220;
+      const CHAIN_MULT = [1, 2, 3, 5, 8, 12];
+      const ORIENTS = [
+        { x: 0, y: -1 },
+        { x: 1, y: 0 },
+        { x: 0, y: 1 },
+        { x: -1, y: 0 },
+      ];
+
+      let audioCtx = null;
+      let audioEnabled = false;
+
+      function ensureAudio() {
+        if (!audioCtx) {
+          const AC = window.AudioContext || window.webkitAudioContext;
+          if (!AC) return false;
+          audioCtx = new AC();
+        }
+        if (audioCtx.state === "suspended") audioCtx.resume();
+        audioEnabled = true;
+        return true;
+      }
+
+      function tone(type, freq, dur, vol, when = 0) {
+        if (!audioEnabled || !audioCtx) return;
+        const t = audioCtx.currentTime + when;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, t);
+        gain.gain.setValueAtTime(0.0001, t);
+        gain.gain.exponentialRampToValueAtTime(vol, t + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(t);
+        osc.stop(t + dur + 0.02);
+      }
+
+      function playMove() { tone("square", 920, 0.05, 0.04); }
+      function playRotate() { tone("triangle", 1150, 0.055, 0.045); }
+      function playDrop() { tone("square", 520, 0.07, 0.055); }
+      function playLock() { tone("triangle", 320, 0.05, 0.05); }
+      function playChain(chain) {
+        const n = Math.min(6, chain);
+        tone("sawtooth", 660 + n * 80, 0.12, 0.055);
+      }
+      function playGameOver() {
+        tone("square", 300, 0.18, 0.06);
+        tone("square", 220, 0.22, 0.05, 0.09);
+      }
+
+      function makeNoiseBurst(vol = 0.15) {
+        if (!audioEnabled || !audioCtx) return;
+        const now = audioCtx.currentTime;
+        const samples = Math.floor(audioCtx.sampleRate * 0.18);
+        const buffer = audioCtx.createBuffer(1, samples, audioCtx.sampleRate);
+        const d = buffer.getChannelData(0);
+        for (let i = 0; i < samples; i++) {
+          const t = i / samples;
+          d[i] = (Math.random() * 2 - 1) * (1 - t) * 0.65;
+        }
+        const src = audioCtx.createBufferSource();
+        const filter = audioCtx.createBiquadFilter();
+        const gain = audioCtx.createGain();
+        src.buffer = buffer;
+        filter.type = "bandpass";
+        filter.frequency.value = 900;
+        gain.gain.setValueAtTime(0.0001, now);
+        gain.gain.exponentialRampToValueAtTime(vol, now + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.18);
+        src.connect(filter);
+        filter.connect(gain);
+        gain.connect(audioCtx.destination);
+        src.start(now);
+        src.stop(now + 0.2);
+      }
+
+      const state = {
+        board: [],
+        pair: null,
+        fragments: null,
+        queue: [],
+        rngSeed: 412991,
+        score: 0,
+        level: 1,
+        elapsedMs: 0,
+        chainDisplay: 0,
+        chainDisplayMs: 0,
+        paused: false,
+        gameOver: false,
+        softDrop: false,
+        gravityAcc: 0,
+        lockAcc: 0,
+        grounded: false,
+        popups: [],
+        particles: [],
+        screenFlash: 0,
+        status: "READY",
+      };
+
+      function seedRand() {
+        state.rngSeed = (state.rngSeed * 1664525 + 1013904223) >>> 0;
+        return state.rngSeed / 4294967296;
+      }
+
+      function randColor() {
+        return Math.floor(seedRand() * COLORS.length);
+      }
+
+      function createEmptyBoard() {
+        return Array.from({ length: ROWS }, () => Array(COLS).fill(-1));
+      }
+
+      function resetGame() {
+        state.board = createEmptyBoard();
+        state.pair = null;
+        state.fragments = null;
+        state.queue = [];
+        state.score = 0;
+        state.level = 1;
+        state.elapsedMs = 0;
+        state.chainDisplay = 0;
+        state.chainDisplayMs = 0;
+        state.paused = false;
+        state.gameOver = false;
+        state.softDrop = false;
+        state.gravityAcc = 0;
+        state.lockAcc = 0;
+        state.grounded = false;
+        state.popups = [];
+        state.particles = [];
+        state.screenFlash = 0;
+        state.status = "READY";
+        while (state.queue.length < 4) state.queue.push(makePair());
+        spawnPair();
+        updateHud();
+      }
+
+      function makePair() {
+        return { a: randColor(), b: randColor() };
+      }
+
+      function nextGravityMs() {
+        const lv = Math.floor(state.elapsedMs / SPEED_STEP_TIME_MS);
+        state.level = lv + 1;
+        return Math.max(MIN_GRAVITY_MS, BASE_GRAVITY_MS - lv * SPEED_STEP_MS);
+      }
+
+      function formatTime(ms) {
+        const sec = Math.floor(ms / 1000);
+        const m = String(Math.floor(sec / 60)).padStart(2, "0");
+        const s = String(sec % 60).padStart(2, "0");
+        return `${m}:${s}`;
+      }
+
+      function activeCells(pair = state.pair) {
+        if (!pair) return [];
+        const off = ORIENTS[pair.dir];
+        return [
+          { x: pair.px, y: pair.py, c: pair.a },
+          { x: pair.px + off.x, y: pair.py + off.y, c: pair.b },
+        ];
+      }
+
+      function fallingCells() {
+        if (state.fragments) return state.fragments;
+        return activeCells();
+      }
+
+      function inBounds(x, y) {
+        return x >= 0 && x < COLS && y >= 0 && y < ROWS;
+      }
+
+      function canPlace(cells) {
+        for (const cell of cells) {
+          if (!inBounds(cell.x, cell.y)) return false;
+          if (state.board[cell.y][cell.x] !== -1) return false;
+        }
+        return true;
+      }
+
+      function spawnPair() {
+        if (state.queue.length < 3) state.queue.push(makePair());
+        const next = state.queue.shift();
+        state.queue.push(makePair());
+        state.pair = { px: 2, py: 1, dir: 0, a: next.a, b: next.b };
+        state.fragments = null;
+        state.grounded = false;
+        state.lockAcc = 0;
+        if (!canPlace(activeCells())) {
+          state.gameOver = true;
+          state.status = "GAME OVER";
+          playGameOver();
+        } else {
+          state.status = "DROP";
+        }
+      }
+
+      function tryMove(dx, dy) {
+        if (!state.pair || state.fragments || state.gameOver || state.paused) return false;
+        const test = { ...state.pair, px: state.pair.px + dx, py: state.pair.py + dy };
+        if (!canPlace(activeCells(test))) return false;
+        state.pair = test;
+        state.grounded = false;
+        state.lockAcc = 0;
+        return true;
+      }
+
+      function tryRotate(dirStep) {
+        if (!state.pair || state.fragments || state.gameOver || state.paused) return false;
+        const ndir = (state.pair.dir + dirStep + 4) % 4;
+        const kicks = [
+          { x: 0, y: 0 },
+          { x: 1, y: 0 },
+          { x: -1, y: 0 },
+          { x: 0, y: -1 },
+        ];
+        for (const k of kicks) {
+          const test = { ...state.pair, dir: ndir, px: state.pair.px + k.x, py: state.pair.py + k.y };
+          if (canPlace(activeCells(test))) {
+            state.pair = test;
+            state.grounded = false;
+            state.lockAcc = 0;
+            return true;
+          }
+        }
+        return false;
+      }
+
+      function hardDrop() {
+        if (!state.pair || state.fragments || state.gameOver || state.paused) return;
+        let moved = 0;
+        while (tryMove(0, 1)) moved += 1;
+        if (moved > 0) playDrop();
+        lockNow();
+      }
+
+      function lockNow() {
+        if (!state.pair) return;
+        const cells = activeCells();
+        for (const cell of cells) {
+          if (inBounds(cell.x, cell.y)) state.board[cell.y][cell.x] = cell.c;
+        }
+        playLock();
+        state.pair = null;
+        resolveBoard();
+      }
+
+      function canDropCell(x, y, occupiedByFragments) {
+        const ny = y + 1;
+        if (!inBounds(x, ny)) return false;
+        if (state.board[ny][x] !== -1) return false;
+        if (occupiedByFragments.has(`${x},${ny}`)) return false;
+        return true;
+      }
+
+      function tryStartSplit() {
+        if (!state.pair) return false;
+        const cells = activeCells();
+        if (cells.length !== 2) return false;
+        const belowA = inBounds(cells[0].x, cells[0].y + 1) && state.board[cells[0].y + 1][cells[0].x] === -1;
+        const belowB = inBounds(cells[1].x, cells[1].y + 1) && state.board[cells[1].y + 1][cells[1].x] === -1;
+        if (belowA === belowB) return false;
+        state.fragments = cells.map((c) => ({ x: c.x, y: c.y, c: c.c }));
+        state.pair = null;
+        state.grounded = false;
+        state.lockAcc = 0;
+        state.status = "SPLIT";
+        playDrop();
+        return true;
+      }
+
+      function updateFragmentsStep() {
+        if (!state.fragments || state.fragments.length !== 2) return;
+        const frags = state.fragments
+          .map((f, idx) => ({ ...f, idx }))
+          .sort((a, b) => b.y - a.y || a.idx - b.idx);
+        const occupied = new Set(frags.map((f) => `${f.x},${f.y}`));
+        let moved = false;
+        for (const f of frags) {
+          occupied.delete(`${f.x},${f.y}`);
+          if (canDropCell(f.x, f.y, occupied)) {
+            f.y += 1;
+            moved = true;
+          }
+          occupied.add(`${f.x},${f.y}`);
+        }
+        state.fragments = frags
+          .sort((a, b) => a.idx - b.idx)
+          .map(({ x, y, c }) => ({ x, y, c }));
+
+        if (!moved) {
+          for (const f of state.fragments) {
+            state.board[f.y][f.x] = f.c;
+          }
+          state.fragments = null;
+          playLock();
+          resolveBoard();
+        }
+      }
+
+      function findGroups() {
+        const seen = Array.from({ length: ROWS }, () => Array(COLS).fill(false));
+        const groups = [];
+        const dirs = [
+          [1, 0],
+          [-1, 0],
+          [0, 1],
+          [0, -1],
+        ];
+        for (let y = 0; y < ROWS; y++) {
+          for (let x = 0; x < COLS; x++) {
+            const color = state.board[y][x];
+            if (color < 0 || seen[y][x]) continue;
+            const q = [{ x, y }];
+            seen[y][x] = true;
+            const cells = [];
+            while (q.length) {
+              const cur = q.shift();
+              cells.push(cur);
+              for (const [dx, dy] of dirs) {
+                const nx = cur.x + dx;
+                const ny = cur.y + dy;
+                if (!inBounds(nx, ny) || seen[ny][nx]) continue;
+                if (state.board[ny][nx] !== color) continue;
+                seen[ny][nx] = true;
+                q.push({ x: nx, y: ny });
+              }
+            }
+            if (cells.length >= 4) groups.push({ color, cells });
+          }
+        }
+        return groups;
+      }
+
+      function collapseBoard() {
+        for (let x = 0; x < COLS; x++) {
+          let write = ROWS - 1;
+          for (let y = ROWS - 1; y >= 0; y--) {
+            const v = state.board[y][x];
+            if (v >= 0) {
+              if (write !== y) {
+                state.board[write][x] = v;
+                state.board[y][x] = -1;
+              }
+              write -= 1;
+            }
+          }
+        }
+      }
+
+      function chainMult(chain) {
+        return chain <= CHAIN_MULT.length ? CHAIN_MULT[chain - 1] : CHAIN_MULT[CHAIN_MULT.length - 1];
+      }
+
+      function addClearFx(cells, chain) {
+        const points = 10 * cells.length * chainMult(chain);
+        const avgX = cells.reduce((s, c) => s + c.x, 0) / cells.length;
+        const avgY = cells.reduce((s, c) => s + c.y, 0) / cells.length;
+        state.popups.push({ x: avgX, y: avgY, text: `+${points}`, life: 650 });
+        const addCount = Math.min(40 - state.particles.length, cells.length * 5);
+        for (let i = 0; i < addCount; i++) {
+          const pick = cells[Math.floor(seedRand() * cells.length)];
+          state.particles.push({
+            x: pick.x + 0.5,
+            y: pick.y + 0.5,
+            vx: (seedRand() - 0.5) * 2.8,
+            vy: (seedRand() - 0.5) * 2.8,
+            life: 420 + seedRand() * 220,
+          });
+        }
+        state.screenFlash = Math.min(0.34, state.screenFlash + 0.16);
+      }
+
+      function resolveBoard() {
+        let chain = 0;
+        while (true) {
+          const groups = findGroups();
+          if (groups.length === 0) break;
+          chain += 1;
+          let cleared = 0;
+          for (const g of groups) {
+            for (const cell of g.cells) {
+              state.board[cell.y][cell.x] = -1;
+            }
+            cleared += g.cells.length;
+            addClearFx(g.cells, chain);
+          }
+          const points = 10 * cleared * chainMult(chain);
+          state.score += points;
+          state.chainDisplay = chain;
+          state.chainDisplayMs = 900;
+          playChain(chain);
+          makeNoiseBurst(0.12 + Math.min(0.08, chain * 0.015));
+          collapseBoard();
+        }
+        if (!state.gameOver) spawnPair();
+      }
+
+      function update(dt) {
+        if (state.paused || state.gameOver) {
+          updateFx(dt);
+          return;
+        }
+
+        state.elapsedMs += dt;
+        const gravityMs = state.softDrop ? SOFT_GRAVITY_MS : nextGravityMs();
+        state.gravityAcc += dt;
+
+        if (state.fragments) {
+          while (state.gravityAcc >= gravityMs && state.fragments) {
+            state.gravityAcc -= gravityMs;
+            updateFragmentsStep();
+          }
+          if (state.chainDisplayMs > 0) state.chainDisplayMs = Math.max(0, state.chainDisplayMs - dt);
+          if (state.chainDisplayMs === 0) state.chainDisplay = 0;
+          updateFx(dt);
+          return;
+        }
+
+        while (state.gravityAcc >= gravityMs) {
+          state.gravityAcc -= gravityMs;
+          if (!tryMove(0, 1)) {
+            if (tryStartSplit()) {
+              continue;
+            }
+            state.grounded = true;
+            break;
+          }
+        }
+
+        if (state.grounded) {
+          state.lockAcc += dt;
+          if (state.lockAcc >= LOCK_DELAY_MS) {
+            lockNow();
+            state.grounded = false;
+            state.lockAcc = 0;
+          }
+        }
+
+        if (state.chainDisplayMs > 0) state.chainDisplayMs = Math.max(0, state.chainDisplayMs - dt);
+        if (state.chainDisplayMs === 0) state.chainDisplay = 0;
+        updateFx(dt);
+      }
+
+      function updateFx(dt) {
+        state.screenFlash = Math.max(0, state.screenFlash - dt * 0.0012);
+
+        for (const p of state.popups) {
+          p.life -= dt;
+          p.y -= dt * 0.0013;
+        }
+        state.popups = state.popups.filter((p) => p.life > 0);
+
+        for (const p of state.particles) {
+          p.life -= dt;
+          p.x += p.vx * (dt / 1000);
+          p.y += p.vy * (dt / 1000);
+          p.vy += 2.1 * (dt / 1000);
+          p.vx *= 0.98;
+        }
+        state.particles = state.particles.filter((p) => p.life > 0);
+      }
+
+      function boardLayout() {
+        const pad = 24;
+        const maxCellW = Math.floor((canvas.width * 0.58) / COLS);
+        const maxCellH = Math.floor((canvas.height - 80) / ROWS);
+        const cell = Math.max(18, Math.min(44, Math.min(maxCellW, maxCellH)));
+        const boardW = cell * COLS;
+        const boardH = cell * ROWS;
+        const x = Math.floor(canvas.width * 0.3 - boardW * 0.5);
+        const y = Math.floor(canvas.height * 0.5 - boardH * 0.5);
+        const sideX = x + boardW + pad;
+        return { x, y, cell, boardW, boardH, sideX };
+      }
+
+      function drawOrb(cx, cy, r, color, alpha = 1) {
+        ctx.save();
+        ctx.strokeStyle = color;
+        ctx.globalAlpha = alpha;
+        ctx.lineWidth = 2.2;
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 10;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(cx, cy, r * 0.64, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Cyber ring accent: short segmented arc instead of filled center.
+        ctx.lineWidth = 1.3;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r * 0.82, -Math.PI * 0.2, Math.PI * 0.28);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(cx, cy, r * 0.82, Math.PI * 0.74, Math.PI * 1.2);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      function drawGridLines(l) {
+        ctx.strokeStyle = "rgba(88,255,150,0.35)";
+        ctx.lineWidth = 1;
+        for (let x = 0; x <= COLS; x++) {
+          ctx.beginPath();
+          ctx.moveTo(l.x + x * l.cell, l.y);
+          ctx.lineTo(l.x + x * l.cell, l.y + l.boardH);
+          ctx.stroke();
+        }
+        for (let y = 0; y <= ROWS; y++) {
+          ctx.beginPath();
+          ctx.moveTo(l.x, l.y + y * l.cell);
+          ctx.lineTo(l.x + l.boardW, l.y + y * l.cell);
+          ctx.stroke();
+        }
+      }
+
+      function drawBoard(l) {
+        ctx.fillStyle = "#031109";
+        ctx.fillRect(l.x, l.y, l.boardW, l.boardH);
+        drawGridLines(l);
+
+        for (let y = 0; y < ROWS; y++) {
+          for (let x = 0; x < COLS; x++) {
+            const c = state.board[y][x];
+            if (c < 0) continue;
+            const cx = l.x + x * l.cell + l.cell * 0.5;
+            const cy = l.y + y * l.cell + l.cell * 0.5;
+            drawOrb(cx, cy, l.cell * 0.37, COLORS[c]);
+          }
+        }
+
+        const cells = fallingCells();
+        for (const cell of cells) {
+          if (cell.y < 0) continue;
+          const cx = l.x + cell.x * l.cell + l.cell * 0.5;
+          const cy = l.y + cell.y * l.cell + l.cell * 0.5;
+          drawOrb(cx, cy, l.cell * 0.39, COLORS[cell.c], 0.98);
+        }
+      }
+
+      function drawNext(l) {
+        ctx.strokeStyle = "rgba(139,255,213,0.6)";
+        ctx.lineWidth = 1.2;
+        ctx.strokeRect(l.sideX, l.y + 8, 150, 180);
+        ctx.fillStyle = "rgba(139,255,213,0.95)";
+        ctx.font = "12px monospace";
+        ctx.textAlign = "left";
+        ctx.fillText("NEXT", l.sideX + 10, l.y + 26);
+
+        for (let i = 0; i < 2; i++) {
+          const p = state.queue[i];
+          if (!p) continue;
+          const bx = l.sideX + 42;
+          const by = l.y + 60 + i * 66;
+          drawOrb(bx, by, 14, COLORS[p.b]);
+          drawOrb(bx, by + 30, 14, COLORS[p.a]);
+        }
+      }
+
+      function drawPopups(l) {
+        ctx.textAlign = "center";
+        ctx.font = "bold 15px monospace";
+        for (const p of state.popups) {
+          const x = l.x + (p.x + 0.5) * l.cell;
+          const y = l.y + (p.y + 0.5) * l.cell;
+          const a = Math.max(0, p.life / 650);
+          ctx.fillStyle = `rgba(160,255,220,${a})`;
+          ctx.fillText(p.text, x, y);
+        }
+      }
+
+      function drawParticles(l) {
+        ctx.strokeStyle = "rgba(255,235,160,0.8)";
+        ctx.lineWidth = 1.4;
+        for (const p of state.particles) {
+          const x = l.x + p.x * l.cell;
+          const y = l.y + p.y * l.cell;
+          const a = Math.max(0, p.life / 640);
+          ctx.globalAlpha = a;
+          ctx.beginPath();
+          ctx.moveTo(x - 2, y);
+          ctx.lineTo(x + 2, y);
+          ctx.moveTo(x, y - 2);
+          ctx.lineTo(x, y + 2);
+          ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+      }
+
+      function drawScanlines() {
+        ctx.strokeStyle = "rgba(88,255,150,0.05)";
+        ctx.lineWidth = 1;
+        for (let y = 0; y < canvas.height; y += 3) {
+          ctx.beginPath();
+          ctx.moveTo(0, y + 0.5);
+          ctx.lineTo(canvas.width, y + 0.5);
+          ctx.stroke();
+        }
+      }
+
+      function drawOverlayText() {
+        if (!state.paused && !state.gameOver && state.chainDisplay === 0) return;
+        let text = "";
+        if (state.gameOver) text = "GAME OVER";
+        else if (state.paused) text = "PAUSED";
+        else text = `${state.chainDisplay} CHAIN`;
+
+        ctx.fillStyle = "rgba(0,0,0,0.35)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "rgba(170,255,220,0.95)";
+        ctx.font = "bold 42px monospace";
+        ctx.textAlign = "center";
+        ctx.fillText(text, canvas.width * 0.5, canvas.height * 0.5);
+      }
+
+      function render() {
+        ctx.fillStyle = "#020804";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        const l = boardLayout();
+        drawBoard(l);
+        drawNext(l);
+        drawPopups(l);
+        drawParticles(l);
+
+        if (state.screenFlash > 0) {
+          ctx.fillStyle = `rgba(210,255,240,${state.screenFlash})`;
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+
+        drawScanlines();
+        drawOverlayText();
+      }
+
+      function updateHud() {
+        hudScore.textContent = String(state.score);
+        hudChain.textContent = String(state.chainDisplay);
+        hudLevel.textContent = String(state.level);
+        hudTime.textContent = formatTime(state.elapsedMs);
+        if (state.gameOver) {
+          hudMode.textContent = "OVER";
+          hudStatus.textContent = "GAME OVER";
+          hudStatus.className = "warn";
+        } else if (state.paused) {
+          hudMode.textContent = "PAUSE";
+          hudStatus.textContent = "PAUSED";
+          hudStatus.className = "";
+        } else {
+          hudMode.textContent = "PLAY";
+          hudStatus.textContent = state.status;
+          hudStatus.className = "";
+        }
+      }
+
+      let lastTs = performance.now();
+      function loop(ts) {
+        const dt = Math.min(50, ts - lastTs);
+        lastTs = ts;
+        update(dt);
+        render();
+        updateHud();
+        requestAnimationFrame(loop);
+      }
+
+      function resize() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+      }
+
+      window.addEventListener("resize", resize);
+
+      window.addEventListener("keydown", (e) => {
+        ensureAudio();
+        const k = e.code;
+        if (["ArrowLeft", "ArrowRight", "ArrowDown", "ArrowUp", "Space"].includes(k)) {
+          e.preventDefault();
+        }
+        if (k === "KeyR") {
+          resetGame();
+          return;
+        }
+        if (k === "KeyP") {
+          if (!state.gameOver) state.paused = !state.paused;
+          return;
+        }
+        if (state.paused || state.gameOver) return;
+
+        if (k === "ArrowLeft") {
+          if (tryMove(-1, 0)) playMove();
+        } else if (k === "ArrowRight") {
+          if (tryMove(1, 0)) playMove();
+        } else if (k === "ArrowDown") {
+          state.softDrop = true;
+          if (tryMove(0, 1)) playMove();
+        } else if (k === "KeyZ") {
+          if (tryRotate(-1)) playRotate();
+        } else if (k === "KeyX" || k === "ArrowUp") {
+          if (tryRotate(1)) playRotate();
+        } else if (k === "Space") {
+          hardDrop();
+        }
+      });
+
+      window.addEventListener("keyup", (e) => {
+        if (e.code === "ArrowDown") state.softDrop = false;
+      });
+
+      canvas.addEventListener("mousedown", () => {
+        ensureAudio();
+      });
+
+      resize();
+      resetGame();
+      requestAnimationFrame(loop);
+    </script>
+  </body>
+</html>

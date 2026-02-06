@@ -1,72 +1,92 @@
 <!DOCTYPE html>
 <html lang="ja">
+
 <head>
-  <meta charset="UTF-8">
-  <title>Privacy Policy | Vector Arcade</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <style>
-    body {
-      background: #000;
-      color: #00ff66;
-      font-family: monospace;
-      line-height: 1.6;
-      padding: 24px;
-    }
-    h1, h2 {
-      color: #aaffcc;
-    }
-    a {
-      color: #66ff99;
-    }
-  </style>
+    <meta charset="UTF-8" />
+    <title>プライバシーポリシー</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <style>
+        :root {
+            --line: #00ff66;
+            --bg: #000000;
+            --dim: #0a2;
+        }
+
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+            background: var(--bg);
+            color: var(--line);
+            font-family: monospace;
+            height: 100%;
+        }
+
+        main {
+            max-width: 760px;
+            margin: 0 auto;
+            padding: 24px 16px 48px;
+        }
+
+        h1 {
+            font-size: 20px;
+            letter-spacing: 1px;
+            border-bottom: 1px solid var(--line);
+            padding-bottom: 8px;
+            margin-bottom: 20px;
+        }
+
+        h2 {
+            font-size: 16px;
+            margin-top: 24px;
+            border-left: 3px solid var(--line);
+            padding-left: 8px;
+        }
+
+        p {
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        footer {
+            margin-top: 24px;
+            font-size: 12px;
+            color: var(--dim);
+        }
+    </style>
 </head>
+
 <body>
+    <main>
+        <h1>プライバシーポリシー</h1>
 
-<h1>Privacy Policy</h1>
+        <p>Vector Arcade（以下「当サービス」）は、お客様の個人情報の保護を重要視し、以下の通りプライバシーポリシーを定めます。</p>
+        <p>運営者：KGNINJA</p>
 
-<p>
-Vector Arcade（以下「本サービス」）は、デジタルエンターテインメント体験を提供する個人運営サービスです。
-</p>
+        <h2>1. 収集する情報</h2>
+        <p>当サービスは、決済プラットフォーム「Stripe」を通じて、決済に必要な情報（メールアドレス、クレジットカード情報等）を収集します。これらの情報はStripeによって安全に管理され、当サービスのサーバー（Cloudflare
+            Worker）に直接クレジットカード番号が保存されることはありません。</p>
 
-<h2>収集する情報</h2>
-<ul>
-  <li>決済時に入力されるメールアドレス</li>
-  <li>決済に関する取引情報</li>
-</ul>
+        <h2>2. 情報の利用目的</h2>
+        <p>収集した情報は、以下の目的で利用します：
+            <br>・サービスの提供（コインの付与）
+            <br>・本人確認およびお問い合わせ対応
+            <br>・不正アクセスの防止
+        </p>
 
-<p>
-※ クレジットカード番号などの決済情報は、Stripe, Inc. により安全に処理され、
-本サービス運営者が保持・閲覧することはありません。
-</p>
+        <h2>3. 第三者への提供</h2>
+        <p>法令に基づく場合を除き、お客様の同意なく個人情報を第三者に提供することはありません。</p>
 
-<h2>利用目的</h2>
-<ul>
-  <li>デジタルコンテンツおよびサービス提供のため</li>
-  <li>決済処理および購入確認のため</li>
-</ul>
+        <h2>4. セキュリティ</h2>
+        <p>当サービスはSSL/TLS暗号化通信を使用し、データの安全な送信を確保しています。</p>
 
-<h2>第三者への提供</h2>
-<p>
-本サービスは決済処理を Stripe, Inc. に委託しています。
-それ以外の第三者に個人情報を提供することはありません。
-</p>
+        <h2>5. お問い合わせ</h2>
+        <p>プライバシーに関するお問い合わせは、以下のメールアドレスまでご連絡ください：
+            <br><a href="mailto:fuwafuwow@gmail.com">fuwafuwow@gmail.com</a>
+        </p>
 
-<h2>データの保存</h2>
-<p>
-ユーザーの個人情報は、決済確認およびサービス提供に必要な範囲を超えて保存しません。
-</p>
-
-<h2>お問い合わせ</h2>
-<p>
-本ポリシーに関するお問い合わせは、以下よりご連絡ください。
-</p>
-<p>
-X (Twitter): <a href="https://twitter.com/KGNINJA" target="_blank">@KGNINJA</a>
-</p>
-
-<p>
-最終更新日: 2026-02
-</p>
-
+        <footer>Vector Arcade / KGNINJA</footer>
+    </main>
 </body>
+
 </html>
