@@ -1,0 +1,12 @@
+{
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "dry-run": "wrangler deploy --dry-run",
+    "secret:stripe": "wrangler secret put STRIPE_SECRET_KEY",
+    "secret:webhook": "wrangler secret put STRIPE_WEBHOOK_SECRET",
+    "secret:price": "wrangler secret put PRICE_ID_PACK_1"
+  },
+  "devDependencies": {
+    "wrangler": "^4.97.0"
+  }
+}

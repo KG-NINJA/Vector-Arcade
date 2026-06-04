@@ -361,10 +361,8 @@
     const WARNING_MS = 2 * 60 * 1000;
     const PLAY_MS = 7 * 60 * 1000;
     const DEMO_MODE = false;
-    // Stripe Payment Link (client-side redirect only)
-    const PAYMENT_LINK_URL = "https://buy.stripe.com/test_14AaEYgEt9tI61G0hx2cg00";
-    // Cloudflare Worker base URL (redeem endpoint)
-    const WORKER_BASE = "https://vector-arcade-worker.your-subdomain.workers.dev";
+    // Cloudflare Worker base URL for checkout and coin redemption.
+    const WORKER_BASE = "https://vector-arcade-coins.fuwafuwow.workers.dev";
     const buyBtn = document.getElementById("buyCoins");
     const redeemStatus = document.getElementById("redeemStatus");
     const cabinetCounterEl = document.getElementById("cabinetCounter");
@@ -393,6 +391,23 @@
       timeEl.textContent = formatTime(remaining);
       if (remaining <= WARNING_MS) timeEl.classList.add("time-warning");
       else timeEl.classList.remove("time-warning");
+    }
+
+    async function buyCoins() {
+      try {
+        buyBtn.disabled = true;
+        if (redeemStatus) redeemStatus.textContent = "Opening checkout...";
+        const res = await fetch(`${WORKER_BASE}/checkout`, { method: "POST" });
+        const data = await res.json();
+        if (!data?.ok || !data?.url) throw new Error(data?.error || "checkout failed");
+        window.location.href = data.url;
+      } catch (e) {
+        console.log("Checkout failed:", e);
+        showModal("CHECKOUT ERROR");
+      } finally {
+        buyBtn.disabled = false;
+        if (redeemStatus) redeemStatus.textContent = "";
+      }
     }
 
     updateTimer();
@@ -450,15 +465,18 @@
     function handleReturnFromStripe() {
       const url = new URL(window.location.href);
       const sessionId = url.searchParams.get("session_id");
+      if (url.searchParams.get("checkout") === "cancelled") {
+        showModal("CHECKOUT CANCELLED");
+        url.searchParams.delete("checkout");
+        window.history.replaceState({}, document.title, url.toString());
+      }
       if (!sessionId) return;
       redeemSession(sessionId);
       url.searchParams.delete("session_id");
       window.history.replaceState({}, document.title, url.toString());
     }
 
-    buyBtn?.addEventListener("click", () => {
-      window.location.href = PAYMENT_LINK_URL;
-    });
+    buyBtn?.addEventListener("click", buyCoins);
 
     const arcade = document.getElementById("arcade");
 

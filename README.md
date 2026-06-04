@@ -28,7 +28,7 @@ Vector Arcade は GitHub Pages 上で動作するレトロ風バーチャルア�
 English
 -------
 Vector Arcade is a retro-style virtual arcade running on GitHub Pages.
-It is currently in **demo mode** and **payments are disabled**.
+Payments are wired through the Cloudflare Worker in `worker/`.
 
 ### Features
 - Static web app that runs fully in the browser
@@ -45,5 +45,5 @@ Upload these files/folders in your repository:
 - `wireframe_cityshooter/index.html`
 
 ### Notes
-- Payments are disabled; BUY COINS only shows a notice.
+- BUY COINS creates a Stripe Checkout Session through the Worker, then redeems paid sessions for coins after redirect.
 - Legal notices are available in `tokusho.html` and `tokusho-en.html`.

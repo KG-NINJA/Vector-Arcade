@@ -14,6 +14,17 @@ function badRequest(message) {
   return json({ error: message }, 400);
 }
 
+function getSiteUrl(req, env) {
+  const site = (env.SITE_URL || "https://kg-ninja.github.io/Vector-Arcade").replace(/\/$/, "");
+  const origin = req.headers.get("origin");
+  if (!origin) return site;
+  const allowed = (env.ALLOWED_ORIGINS || "https://kg-ninja.github.io")
+    .split(",")
+    .map((v) => v.trim().replace(/\/$/, ""))
+    .filter(Boolean);
+  return allowed.includes(origin.replace(/\/$/, "")) ? site : site;
+}
+
 function timingSafeEqual(a, b) {
   if (a.length !== b.length) return false;
   let out = 0;
@@ -73,6 +84,24 @@ async function fetchStripe(path, method, secretKey, body) {
   return data;
 }
 
+async function createCheckoutSession(req, env) {
+  if (!env.STRIPE_SECRET_KEY) return json({ error: "stripe secret missing" }, 500);
+  if (!env.PRICE_ID_PACK_1) return json({ error: "price id missing" }, 500);
+
+  const site = getSiteUrl(req, env);
+  const params = new URLSearchParams();
+  params.set("mode", "payment");
+  params.set("line_items[0][price]", env.PRICE_ID_PACK_1);
+  params.set("line_items[0][quantity]", "1");
+  params.set("success_url", `${site}/?session_id={CHECKOUT_SESSION_ID}`);
+  params.set("cancel_url", `${site}/?checkout=cancelled`);
+  params.set("metadata[product]", "vector_arcade_coin_pack");
+  params.set("metadata[coins]", String(env.COINS_PACK_1 || "5"));
+
+  const session = await fetchStripe("checkout/sessions", "POST", env.STRIPE_SECRET_KEY, params);
+  return json({ ok: true, url: session.url, id: session.id });
+}
+
 async function getSessionLineItems(sessionId, secretKey) {
   const data = await fetchStripe(`checkout/sessions/${sessionId}/line_items`, "GET", secretKey);
   return data?.data || [];
@@ -91,6 +120,14 @@ export default {
           "access-control-allow-headers": "content-type, stripe-signature",
         },
       });
+    }
+
+    if (url.pathname === "/checkout" && req.method === "POST") {
+      try {
+        return await createCheckoutSession(req, env);
+      } catch (e) {
+        return json({ error: e.message || "checkout failed" }, 500);
+      }
     }
 
     if (url.pathname === "/redeem" && req.method === "POST") {
@@ -112,7 +149,7 @@ export default {
       stored.redeemed_at = new Date().toISOString();
       await env.SESSIONS.put(key, JSON.stringify(stored));
 
-      return json({ coins_granted: stored.coins, session_id: sessionId });
+      return json({ ok: true, coins: stored.coins, coins_granted: stored.coins, session_id: sessionId });
     }
 
     if (url.pathname === "/webhook" && req.method === "POST") {

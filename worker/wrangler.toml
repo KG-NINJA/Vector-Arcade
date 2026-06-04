@@ -4,7 +4,9 @@ compatibility_date = "2024-12-01"
 
 [vars]
 COINS_PACK_1 = "5"
+SITE_URL = "https://kg-ninja.github.io/Vector-Arcade"
+ALLOWED_ORIGINS = "https://kg-ninja.github.io"
 
 [[kv_namespaces]]
 binding = "SESSIONS"
-id = "REPLACE_WITH_KV_ID"
+id = "e6c929b03b88401ea1a093e65d722875"
