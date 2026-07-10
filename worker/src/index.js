@@ -14,6 +14,124 @@ function badRequest(message) {
   return json({ error: message }, 400);
 }
 
+function workerBase(req, env) {
+  return (env.WORKER_BASE_URL || new URL(req.url).origin).replace(/\/$/, "");
+}
+
+function x402Product(req, env) {
+  const base = workerBase(req, env);
+  const price = env.X402_PRICE_USDC || "9.99";
+  const payTo = env.X402_PAY_TO || "0x0000000000000000000000000000000000000000";
+  return {
+    id: "vector-arcade-monetization-system",
+    name: "Vector Arcade Monetization System",
+    description:
+      "Production-ready static arcade monetization system: GitHub Pages frontend, Cloudflare Worker, Stripe Checkout, webhook redemption, KV session ledger, and agent-ready x402 sales surface.",
+    price: `${price} USDC`,
+    network: env.X402_NETWORK || "base",
+    payTo,
+    endpoints: {
+      buy: `${base}/x402/vector-arcade-system`,
+      discovery: `${base}/.well-known/x402/discovery/resources`,
+    },
+    deliverables: [
+      "Cloudflare Worker source",
+      "Stripe Checkout + webhook flow",
+      "KV-backed coin redemption logic",
+      "GitHub Pages integration notes",
+      "Agent-facing x402 discovery metadata",
+    ],
+  };
+}
+
+function x402PaymentRequired(req, env) {
+  const product = x402Product(req, env);
+  return json(
+    {
+      x402Version: 1,
+      error: "payment_required",
+      accepts: [
+        {
+          scheme: "exact",
+          network: product.network,
+          maxAmountRequired: env.X402_PRICE_ATOMIC || "9990000",
+          resource: product.endpoints.buy,
+          description: product.description,
+          mimeType: "application/json",
+          payTo: product.payTo,
+          asset: env.X402_ASSET || "USDC",
+          extra: {
+            name: product.name,
+            price: product.price,
+          },
+        },
+      ],
+    },
+    402
+  );
+}
+
+async function postJson(url, payload) {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json().catch(() => ({}));
+  return { ok: res.ok, status: res.status, data };
+}
+
+async function verifyX402Payment(req, env) {
+  const payment = req.headers.get("x-payment");
+  if (!payment) return { ok: false, response: x402PaymentRequired(req, env) };
+  if (!env.X402_FACILITATOR_URL) {
+    return { ok: false, response: json({ error: "x402 facilitator missing" }, 500) };
+  }
+
+  const product = x402Product(req, env);
+  const requirements = x402PaymentRequired(req, env);
+  const requirementsBody = await requirements.json();
+  const payload = {
+    x402Version: 1,
+    payment,
+    paymentRequirements: requirementsBody.accepts[0],
+  };
+
+  const verify = await postJson(`${env.X402_FACILITATOR_URL.replace(/\/$/, "")}/verify`, payload);
+  if (!verify.ok || verify.data?.isValid === false || verify.data?.valid === false) {
+    return { ok: false, response: x402PaymentRequired(req, env) };
+  }
+
+  const settle = await postJson(`${env.X402_FACILITATOR_URL.replace(/\/$/, "")}/settle`, payload);
+  if (!settle.ok) {
+    return { ok: false, response: json({ error: "x402 settlement failed" }, 402) };
+  }
+
+  return { ok: true, settlement: settle.data, product };
+}
+
+function systemPackage(req, env, settlement) {
+  const product = x402Product(req, env);
+  return json({
+    ok: true,
+    settlement,
+    product,
+    implementation: {
+      frontend: "Static HTML arcade with local coin timer and BUY COINS flow.",
+      backend: "Cloudflare Worker exposes /checkout, /webhook, /redeem, x402 discovery, and paid package delivery.",
+      payment: "Stripe Checkout handles human card payment; x402 endpoint packages the system for AI-agent purchase.",
+      ledger: "Cloudflare KV stores paid checkout sessions until redemption.",
+    },
+    integrationSteps: [
+      "Clone https://github.com/KG-NINJA/Vector-Arcade",
+      "Create Cloudflare KV namespace and bind it as SESSIONS",
+      "Set STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, and PRICE_ID_PACK_1 secrets",
+      "Set X402_PAY_TO to the seller wallet",
+      "Deploy worker and publish GitHub Pages frontend",
+    ],
+  });
+}
+
 function getSiteUrl(req, env) {
   const site = (env.SITE_URL || "https://kg-ninja.github.io/Vector-Arcade").replace(/\/$/, "");
   const origin = req.headers.get("origin");
@@ -128,6 +246,34 @@ export default {
       } catch (e) {
         return json({ error: e.message || "checkout failed" }, 500);
       }
+    }
+
+    if (url.pathname === "/.well-known/x402/discovery/resources" && req.method === "GET") {
+      const product = x402Product(req, env);
+      return json({
+        x402Version: 1,
+        resources: [
+          {
+            type: "paid-api",
+            url: product.endpoints.buy,
+            name: product.name,
+            description: product.description,
+            price: product.price,
+            network: product.network,
+            payTo: product.payTo,
+            method: "GET",
+            output: "application/json",
+            value:
+              "Lets an AI agent buy the complete monetization blueprint for adding paid coins to static browser games.",
+          },
+        ],
+      });
+    }
+
+    if (url.pathname === "/x402/vector-arcade-system" && req.method === "GET") {
+      const verified = await verifyX402Payment(req, env);
+      if (!verified.ok) return verified.response;
+      return systemPackage(req, env, verified.settlement);
     }
 
     if (url.pathname === "/redeem" && req.method === "POST") {
