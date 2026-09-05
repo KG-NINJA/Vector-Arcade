@@ -27,8 +27,8 @@ COINS_PACK_1 = "5"
 SITE_URL = "https://kg-ninja.github.io/Vector-Arcade"
 ALLOWED_ORIGINS = "https://kg-ninja.github.io"
 WORKER_BASE_URL = "https://vector-arcade-coins.fuwafuwow.workers.dev"
-X402_PRICE_USDC = "9.99"
-X402_PRICE_ATOMIC = "9990000"
+X402_PRICE_USDC = "0.5"
+X402_PRICE_ATOMIC = "500000"
 X402_NETWORK = "base"
 X402_ASSET = "USDC"
 X402_PAY_TO = "0x..."
@@ -60,7 +60,7 @@ Before enabling, set a nonzero `X402_PAY_TO` address and a facilitator whose
 This implementation accepts an unauthenticated HTTPS facilitator; services
 requiring credentials need an authentication adapter before use.
 The existing `base` and `USDC` config aliases resolve to Base mainnet and its
-USDC contract address. Atomic price is authoritative: `9990000` = 9.99 USDC.
+USDC contract address. Atomic price is authoritative: `500000` = 0.5 USDC.
 `X402_PRICE_USDC` is retained for compatibility but not used to form offers.
 
 Discovery: `/.well-known/x402` (legacy discovery URL remains available).

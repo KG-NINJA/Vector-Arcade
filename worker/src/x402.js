@@ -18,7 +18,7 @@ export function response(body, status = 200, headers = {}) {
 }
 export function offer(env) {
   const base = (env.WORKER_BASE_URL || "https://vector-arcade-coins.fuwafuwow.workers.dev").replace(/\/$/, "");
-  const amount = env.X402_PRICE_ATOMIC || "9990000";
+  const amount = env.X402_PRICE_ATOMIC || "500000";
   const network = env.X402_NETWORK === "base" ? "eip155:8453" : env.X402_NETWORK;
   const asset = env.X402_ASSET === "USDC" ? USDC : env.X402_ASSET;
   const payTo = env.X402_PAY_TO || "";

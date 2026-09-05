@@ -17,7 +17,7 @@ function fixture() {
     return objects.get(id);
   } };
   const required = offer(env).required;
-  const payment = { x402Version: 2, resource: required.resource, accepted: required.accepts[0], payload: { signature: "0x1234", authorization: { from: "0x2222222222222222222222222222222222222222", to: env.X402_PAY_TO, value: "9990000", validAfter: "0", validBefore: "9999999999", nonce: "0x" + "a".repeat(64) } } };
+  const payment = { x402Version: 2, resource: required.resource, accepted: required.accepts[0], payload: { signature: "0x1234", authorization: { from: "0x2222222222222222222222222222222222222222", to: env.X402_PAY_TO, value: "500000", validAfter: "0", validBefore: "9999999999", nonce: "0x" + "a".repeat(64) } } };
   const request = (p = payment) => new Request(env.WORKER_BASE_URL + BUY, { headers: { "PAYMENT-SIGNATURE": encodePaymentSignatureHeader(p) } });
   return { env, required, payment, request, records };
 }
@@ -30,6 +30,7 @@ test("unpaid challenge uses SDK-valid v2, exact USDC terms and CORS", async () =
   const body = await res.json();
   assert.deepEqual(decodePaymentRequiredHeader(res.headers.get("PAYMENT-REQUIRED")), body);
   PaymentRequiredV2Schema.parse(body);
+  assert.equal(body.accepts[0].amount, "500000");
   assert.deepEqual(body.accepts[0].extra, { name: "USD Coin", version: "2" });
   const discovery = await (await worker.fetch(new Request(env.WORKER_BASE_URL + "/.well-known/x402"), env)).json();
   assert.deepEqual(discovery.accepts, body.accepts);
