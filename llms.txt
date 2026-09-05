@@ -1,0 +1,13 @@
+# Vector Arcade
+
+Browser arcade with Stripe coin purchases and an x402 API for AI agents.
+The agent product is a structured integration blueprint, not game coins.
+Source code is publicly available at no charge.
+
+- Source: https://github.com/KG-NINJA/Vector-Arcade
+- Agent availability and terms: https://vector-arcade-coins.fuwafuwow.workers.dev/.well-known/x402
+- OpenAPI: https://vector-arcade-coins.fuwafuwow.workers.dev/openapi.json
+- Purchase: https://vector-arcade-coins.fuwafuwow.workers.dev/x402/vector-arcade-system
+
+Read discovery before paying. A 503 indicates sales are unavailable.
+After an uncertain settlement, do not issue another payment.

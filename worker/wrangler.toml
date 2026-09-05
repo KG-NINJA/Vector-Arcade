@@ -1,6 +1,8 @@
 name = "vector-arcade-coins"
 main = "src/index.js"
 compatibility_date = "2024-12-01"
+workers_dev = true
+preview_urls = false
 
 [vars]
 COINS_PACK_1 = "5"
@@ -11,8 +13,17 @@ X402_PRICE_USDC = "9.99"
 X402_PRICE_ATOMIC = "9990000"
 X402_NETWORK = "base"
 X402_ASSET = "USDC"
-X402_PAY_TO = "0x0000000000000000000000000000000000000000"
+X402_PAY_TO = "0x4D7d842536De9Eb491AE2300126B3CDdE7B0aDE3"
 X402_FACILITATOR_URL = "https://x402.org/facilitator"
+X402_ENABLED = "false"
+
+[[durable_objects.bindings]]
+name = "AGENT_PURCHASES"
+class_name = "AgentPurchase"
+
+[[migrations]]
+tag = "v1-agent-purchases"
+new_sqlite_classes = ["AgentPurchase"]
 
 [[kv_namespaces]]
 binding = "SESSIONS"

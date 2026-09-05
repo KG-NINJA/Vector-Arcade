@@ -1,5 +1,8 @@
 {
+  "type": "module",
   "scripts": {
+    "test": "node --test test/*.test.js",
+    "check": "node --check src/index.js && node --check src/x402.js",
     "deploy": "wrangler deploy",
     "dry-run": "wrangler deploy --dry-run",
     "secret:stripe": "wrangler secret put STRIPE_SECRET_KEY",
@@ -8,5 +11,8 @@
   },
   "devDependencies": {
     "wrangler": "^4.97.0"
+  },
+  "dependencies": {
+    "@x402/core": "^2.25.0"
   }
 }
