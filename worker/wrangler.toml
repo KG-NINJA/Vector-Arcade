@@ -14,6 +14,7 @@ X402_PRICE_ATOMIC = "500000"
 X402_NETWORK = "base"
 X402_ASSET = "USDC"
 X402_PAY_TO = "0x4D7d842536De9Eb491AE2300126B3CDdE7B0aDE3"
+# x402.org is testnet-only; mainnet requires CDP/Circle with auth adapter (see README)
 X402_FACILITATOR_URL = "https://x402.org/facilitator"
 X402_ENABLED = "false"
 
