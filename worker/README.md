@@ -44,27 +44,45 @@ curl https://vector-arcade-coins.fuwafuwow.workers.dev/.well-known/x402
 
 ### 4. Enable x402 agent sales (optional)
 
-**⚠️ IMPORTANT: x402.org/facilitator currently advertises Base Sepolia (`eip155:84532`),
-NOT Base mainnet (`eip155:8453`). Do NOT enable mainnet sales against that facilitator
-until a mainnet-capable facilitator is confirmed.**
+**⚠️ IMPORTANT: Sales MUST remain disabled (`X402_ENABLED=false`) until a Base mainnet
+facilitator is correctly configured. See the facilitator table below.**
 
-Before setting `X402_ENABLED=true`:
+#### Base mainnet facilitator candidates
 
-1. Set `X402_PAY_TO` to a valid KG-NINJA-owned Base mainnet address
-   - Verified address: `0x4D7d842536De9Eb491AE2300126B3CDdE7B0aDE3`
-   - Do NOT use third-party addresses
-2. Set `X402_FACILITATOR_URL` to a facilitator supporting x402 v2 exact eip155:8453 (Base mainnet)
-3. Verify the facilitator's `/supported` endpoint confirms Base mainnet + USDC:
-   ```bash
-   curl https://your-facilitator.example/supported
-   # Must include: eip155:8453, USDC, v2, exact
-   ```
-4. Create the AGENT_PURCHASES Durable Object (run migration or deploy)
+| Facilitator | Mainnet | Auth | Notes |
+|-------------|---------|------|-------|
+| **x402.org public** | **No** | — | `/supported` returns only testnets (`eip155:84532` Base Sepolia, `solana-devnet`). **Not usable for mainnet.** |
+| **Coinbase CDP** | Yes | CDP API key | Base mainnet `eip155:8453` with exact/upto/batch. Requires authenticated client. [Docs](https://docs.cdp.coinbase.com/x402/seller/facilitator) |
+| **Circle Facilitator** | Yes | Circle API key | Base USDC EIP-3009 exact. Production settle requires Circle credentials. |
+
+This Worker currently uses unauthenticated HTTPS for facilitator calls (`src/x402.js`
+`callFacilitator()`). CDP and Circle require an authentication adapter that adds
+API credentials to `/verify` and `/settle` requests before they can be used.
+
+#### Enablement requirements
+
+Keep `X402_ENABLED=false` until **all** conditions are met:
+
+1. **Facilitator supports mainnet**: Query `/supported` (or equivalent) and confirm
+   it includes `eip155:8453` (Base mainnet), `exact` settlement, and USDC asset.
+   The default `https://x402.org/facilitator` does NOT support mainnet.
+
+2. **Auth adapter exists (if required)**: For CDP or Circle, implement an adapter
+   in `src/x402.js` that injects the facilitator API key into requests. Add the
+   key as a Wrangler secret.
+
+3. **payTo is the verified address**: Use only `0x4D7d842536De9Eb491AE2300126B3CDdE7B0aDE3`.
+   Do NOT change to any other address without owner verification.
+
+4. **Test on testnet first**: Before mainnet enablement, verify the full payment
+   and settlement flow on Base Sepolia with a testnet payTo address.
+
+5. **AGENT_PURCHASES Durable Object exists**: Run migration or deploy to create it.
 
 ```bash
-# Verify discovery shows available offers
+# After enablement, verify discovery shows offers:
 curl https://vector-arcade-coins.fuwafuwow.workers.dev/.well-known/x402
-# Response should include "available": true and non-empty "accepts" array
+# Must return: "available": true, non-empty "accepts" array with eip155:8453
 ```
 
 ### 5. Frontend integration status
@@ -127,13 +145,12 @@ The API now uses x402 **v2** (`PAYMENT-REQUIRED`, `PAYMENT-SIGNATURE`,
 Sales are disabled by default (`X402_ENABLED = "false"`). When disabled, discovery
 returns HTTP 200 with `"available": false` and an empty `"accepts"` array (not 503).
 A 503 is returned only when payment is attempted but configuration is invalid.
-Before enabling, set a nonzero `X402_PAY_TO` address and a facilitator whose
-`/supported` response includes v2 / exact / `eip155:8453`. The existing
-`https://x402.org/facilitator` value is not proof of Base mainnet support.
-This implementation accepts an unauthenticated HTTPS facilitator; services
-requiring credentials need an authentication adapter before use.
-The existing `base` and `USDC` config aliases resolve to Base mainnet and its
-USDC contract address. Atomic price is authoritative: `500000` = 0.5 USDC.
+
+**See the Operator Checklist section above** for Base mainnet facilitator candidates
+and enablement requirements. The default `https://x402.org/facilitator` is testnet-only.
+
+The existing `base` and `USDC` config aliases resolve to Base mainnet (`eip155:8453`)
+and its USDC contract address. Atomic price is authoritative: `500000` = 0.5 USDC.
 `X402_PRICE_USDC` is retained for compatibility but not used to form offers.
 
 Discovery: `/.well-known/x402` (legacy discovery URL remains available).
