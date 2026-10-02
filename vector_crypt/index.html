@@ -673,16 +673,31 @@
 
       generateFloor(floor) {
         // Clear existing objects
-        if (this.floorLayer) this.floorLayer.destroy();
-        if (this.wallLayer) this.wallLayer.destroy();
-        if (this.decorLayer) this.decorLayer.destroy();
-        this.enemies.forEach(e => e.sprite?.destroy());
+        if (this.floorLayer) this.floorLayer.destroy(true);
+        if (this.wallLayer) this.wallLayer.destroy(true);
+        if (this.decorLayer) this.decorLayer.destroy(true);
+        this.enemies.forEach(e => {
+          e.sprite?.destroy();
+          e.hpBarBg?.destroy();
+          e.hpBarFill?.destroy();
+          e.nameText?.destroy();
+        });
         this.enemies = [];
-        this.pickups.forEach(p => p.sprite?.destroy());
+        this.pickups.forEach(p => {
+          this.tweens.killTweensOf(p.sprite);
+          p.sprite?.destroy();
+        });
         this.pickups = [];
-        this.projectiles.forEach(p => p.sprite?.destroy());
+        this.projectiles.forEach(p => {
+          p.sprite?.destroy();
+          p.light?.destroy();
+        });
         this.projectiles = [];
-        this.torches.forEach(t => t.sprite?.destroy());
+        this.torches.forEach(t => {
+          this.tweens.killTweensOf(t.light);
+          t.sprite?.destroy();
+          t.light?.destroy();
+        });
         this.torches = [];
 
         // Generate map data
@@ -713,6 +728,26 @@
           for (let dy = 0; dy < rh; dy++) {
             for (let dx = 0; dx < rw; dx++) {
               this.map[ry + dy][rx + dx] = this.CELL_FLOOR;
+            }
+          }
+        }
+
+        // Random attempts are bounded; always keep the entrance and exit separate.
+        // Scan deterministically only if unlucky rolls produced a single room.
+        if (this.rooms.length < 2) {
+          for (let ry = 2; ry <= MAP_H - 7 && this.rooms.length < 2; ry++) {
+            for (let rx = 2; rx <= MAP_W - 8 && this.rooms.length < 2; rx++) {
+              const room = { x: rx, y: ry, w: 5, h: 4 };
+              const overlap = this.rooms.some(r =>
+                rx < r.x + r.w + 2 && rx + room.w + 2 > r.x &&
+                ry < r.y + r.h + 2 && ry + room.h + 2 > r.y);
+              if (overlap) continue;
+              this.rooms.push(room);
+              for (let dy = 0; dy < room.h; dy++) {
+                for (let dx = 0; dx < room.w; dx++) {
+                  this.map[ry + dy][rx + dx] = this.CELL_FLOOR;
+                }
+              }
             }
           }
         }
@@ -953,21 +988,6 @@
 
         this.input.on('pointerdown', () => this.ensureAudio());
         this.input.keyboard.on('keydown', () => this.ensureAudio());
-
-        // Direct DOM listener for pause/restart (works during game over/pause)
-        const scene = this;
-        window.addEventListener('keydown', (e) => {
-          if (e.code === 'KeyR') {
-            scene.restartGame();
-          } else if (e.code === 'KeyP' && !gameState.gameOver) {
-            gameState.paused = !gameState.paused;
-            if (gameState.paused) {
-              scene.showOverlay();
-            } else {
-              scene.hideOverlay();
-            }
-          }
-        });
       }
 
       setupLighting() {
@@ -1045,33 +1065,38 @@
         this.cameras.main.setBackgroundColor(PAL.black);
       }
 
+      isRunActive() {
+        return this.player && this.player.hp > 0 && !gameState.paused && !gameState.gameOver;
+      }
+
       update(time, delta) {
-        if (gameState.paused || gameState.gameOver) {
-          this.handlePauseInput();
+        // Handle these keys once, including while the run is paused or finished.
+        if (Phaser.Input.Keyboard.JustDown(this.keys.r)) {
+          this.restartGame();
           return;
         }
+        if (Phaser.Input.Keyboard.JustDown(this.keys.p) && !gameState.gameOver) {
+          gameState.paused = !gameState.paused;
+          if (gameState.paused) this.showOverlay();
+          else this.hideOverlay();
+        }
+        if (!this.isRunActive()) return;
 
         this.updatePlayer(delta);
+        if (!this.isRunActive()) return;
         this.updateEnemies(delta);
+        if (!this.isRunActive()) return;
         this.updateProjectiles(delta);
+        if (!this.isRunActive()) return;
         this.updatePickups();
+        this.updateHUD();
         this.updateDarkness();
         this.updateMinimap();
       }
 
-      handlePauseInput() {
-        if (Phaser.Input.Keyboard.JustDown(this.keys.p) && !gameState.gameOver) {
-          gameState.paused = !gameState.paused;
-          this.showOverlay();
-        }
-        if (Phaser.Input.Keyboard.JustDown(this.keys.r)) {
-          this.restartGame();
-        }
-      }
-
       updatePlayer(delta) {
+        if (!this.isRunActive()) return;
         const p = this.player;
-        if (!p) return;
 
         // Cooldowns
         p.attackCd = Math.max(0, p.attackCd - delta);
@@ -1129,17 +1154,6 @@
           this.useHeal();
         }
 
-        // Pause
-        if (Phaser.Input.Keyboard.JustDown(this.keys.p)) {
-          gameState.paused = true;
-          this.showOverlay();
-        }
-
-        // Restart
-        if (Phaser.Input.Keyboard.JustDown(this.keys.r)) {
-          this.restartGame();
-        }
-
         // Check stairs
         this.checkStairs();
 
@@ -1148,6 +1162,7 @@
       }
 
       playerMeleeAttack() {
+        if (!this.isRunActive()) return;
         const p = this.player;
         p.attackCd = PLAYER_ATK_CD;
         p.isAttacking = true;
@@ -1172,11 +1187,14 @@
           onComplete: () => slash.destroy()
         });
 
-        // Hit enemies
+        // Match the forward 90-degree slash instead of hitting behind the player.
         for (const e of this.enemies) {
+          if (!this.isRunActive()) break;
           if (e.hp <= 0) continue;
-          const dist = Phaser.Math.Distance.Between(p.x, p.y, e.x, e.y);
-          if (dist <= PLAYER_ATK_RANGE) {
+          const dx = e.x - p.x, dy = e.y - p.y;
+          const dist = Math.hypot(dx, dy);
+          const facingDot = dx * p.facing.x + dy * p.facing.y;
+          if (dist <= PLAYER_ATK_RANGE && facingDot >= dist * Math.SQRT1_2 - 1e-9) {
             this.damageEnemy(e, PLAYER_ATK);
           }
         }
@@ -1188,6 +1206,7 @@
       }
 
       useFireball() {
+        if (!this.isRunActive()) return;
         const p = this.player;
         if (p.fireballCd > 0) return;
 
@@ -1214,6 +1233,7 @@
       }
 
       useHeal() {
+        if (!this.isRunActive()) return;
         const p = this.player;
         if (p.healCd > 0 || p.hp >= p.maxHp) return;
 
@@ -1241,6 +1261,7 @@
       }
 
       damageEnemy(enemy, dmg) {
+        if (!this.isRunActive() || enemy.hp <= 0) return;
         enemy.hp -= dmg;
         this.sfxEnemyHit();
 
@@ -1266,6 +1287,7 @@
       }
 
       killEnemy(enemy) {
+        if (!this.isRunActive()) return;
         gameState.kills++;
         const goldDrop = enemy.isBoss ? Phaser.Math.Between(60, 120) : Phaser.Math.Between(8, 20);
         gameState.gold += goldDrop;
@@ -1299,6 +1321,7 @@
       }
 
       damagePlayer(dmg) {
+        if (!this.isRunActive()) return;
         const p = this.player;
         p.hp -= dmg;
         this.sfxHit();
@@ -1342,6 +1365,7 @@
 
       updateEnemies(delta) {
         for (const e of this.enemies) {
+          if (!this.isRunActive()) break;
           if (e.hp <= 0) continue;
 
           e.attackCd = Math.max(0, e.attackCd - delta);
@@ -1386,6 +1410,7 @@
 
       updateProjectiles(delta) {
         for (const proj of this.projectiles) {
+          if (!this.isRunActive()) break;
           proj.x += proj.vx * (delta / 1000);
           proj.y += proj.vy * (delta / 1000);
           proj.ttl -= delta;
@@ -1418,7 +1443,7 @@
             }
           }
 
-          if (proj.ttl <= 0) {
+          if (proj.ttl <= 0 && !proj.destroyed) {
             this.destroyProjectile(proj);
           }
         }
@@ -1427,6 +1452,8 @@
       }
 
       destroyProjectile(proj) {
+        if (proj.destroyed) return;
+        proj.destroyed = true;
         // Explosion effect
         this.fireEmitter.setPosition(proj.x, proj.y);
         this.fireEmitter.explode(15);
@@ -1437,6 +1464,7 @@
       }
 
       updatePickups() {
+        if (!this.isRunActive()) return;
         const p = this.player;
         for (let i = this.pickups.length - 1; i >= 0; i--) {
           const pk = this.pickups[i];
@@ -1447,11 +1475,13 @@
               gameState.gold += pk.value;
               this.showDamageText(pk.x, pk.y - 10, '+' + pk.value, 0xc9a227);
             } else {
+              if (p.hp >= p.maxHp) continue;
               const heal = Math.min(pk.value, p.maxHp - p.hp);
               p.hp += heal;
               this.showDamageText(pk.x, pk.y - 10, '+' + heal, 0x44ff44);
             }
             this.sfxPickup();
+            this.tweens.killTweensOf(pk.sprite);
             pk.sprite.destroy();
             this.pickups.splice(i, 1);
           }
@@ -1459,6 +1489,7 @@
       }
 
       checkStairs() {
+        if (!this.isRunActive()) return;
         if (!this.stairsPos) return;
 
         const p = this.player;
