@@ -355,10 +355,12 @@
 
     const storedCoins = localStorage.getItem("coins");
     const hasFreeCoin = localStorage.getItem("has_free_coin");
-    let coins = storedCoins === null ? 1 : Number(storedCoins);
-    if (!hasFreeCoin && coins <= 0) {
-      coins = 1;
+    let coins = storedCoins === null ? 0 : Number(storedCoins);
+    // Grant one free demo coin per browser (tracked separately from purchased balance)
+    if (!hasFreeCoin) {
+      coins += 1;
       localStorage.setItem("has_free_coin", "1");
+      localStorage.setItem("coins", String(coins));
     }
     const coinEl = document.getElementById("coinCount");
     const timeEl = document.getElementById("timeLeft");
@@ -380,12 +382,19 @@
       try {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 5000);
-        const res = await fetch(`${WORKER_BASE}/.well-known/x402`, {
+        // Use /ready endpoint which checks Stripe configuration, not just Worker reachability
+        const res = await fetch(`${WORKER_BASE}/ready`, {
           method: "GET",
           signal: controller.signal,
         });
         clearTimeout(timeout);
-        workerAvailable = res.ok;
+        if (res.ok) {
+          const data = await res.json();
+          // Worker is available only if Stripe checkout is fully configured
+          workerAvailable = data.ready === true && data.checkout === true;
+        } else {
+          workerAvailable = false;
+        }
       } catch (e) {
         workerAvailable = false;
       }
@@ -551,6 +560,9 @@
     }
 
     buyBtn?.addEventListener("click", buyCoins);
+
+    // Handle return from Stripe checkout - must run on page load
+    handleReturnFromStripe();
 
     const arcade = document.getElementById("arcade");
 

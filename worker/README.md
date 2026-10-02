@@ -24,8 +24,15 @@ npm run deploy
 ### 2. Verify Worker is reachable
 
 ```bash
-curl -I https://vector-arcade-coins.fuwafuwow.workers.dev/.well-known/x402
-# Should return HTTP 200 (or 503 if X402_ENABLED=false, which is expected)
+# Check Stripe readiness (for human coin purchases)
+curl https://vector-arcade-coins.fuwafuwow.workers.dev/ready
+# Returns {"ready":true,"checkout":true,...} with HTTP 200 if Stripe is configured
+# Returns {"ready":false,...} with HTTP 503 if secrets are missing
+
+# Check x402 discovery (for agent purchases)
+curl https://vector-arcade-coins.fuwafuwow.workers.dev/.well-known/x402
+# Returns HTTP 200 with {"available":false,...} if X402_ENABLED=false (expected default)
+# Returns HTTP 200 with {"available":true,...} and non-empty "accepts" if x402 is enabled
 # A 404 means the Worker is not deployed or routes are not bound
 ```
 
@@ -37,11 +44,21 @@ curl -I https://vector-arcade-coins.fuwafuwow.workers.dev/.well-known/x402
 
 ### 4. Enable x402 agent sales (optional)
 
+**⚠️ IMPORTANT: x402.org/facilitator currently advertises Base Sepolia (`eip155:84532`),
+NOT Base mainnet (`eip155:8453`). Do NOT enable mainnet sales against that facilitator
+until a mainnet-capable facilitator is confirmed.**
+
 Before setting `X402_ENABLED=true`:
 
 1. Set `X402_PAY_TO` to a valid KG-NINJA-owned Base mainnet address
-2. Set `X402_FACILITATOR_URL` to a facilitator supporting x402 v2 exact eip155:8453
-3. Verify the facilitator's `/supported` endpoint confirms Base mainnet + USDC
+   - Verified address: `0x4D7d842536De9Eb491AE2300126B3CDdE7B0aDE3`
+   - Do NOT use third-party addresses
+2. Set `X402_FACILITATOR_URL` to a facilitator supporting x402 v2 exact eip155:8453 (Base mainnet)
+3. Verify the facilitator's `/supported` endpoint confirms Base mainnet + USDC:
+   ```bash
+   curl https://your-facilitator.example/supported
+   # Must include: eip155:8453, USDC, v2, exact
+   ```
 4. Create the AGENT_PURCHASES Durable Object (run migration or deploy)
 
 ```bash
@@ -107,8 +124,9 @@ curl -i https://vector-arcade-coins.fuwafuwow.workers.dev/x402/vector-arcade-sys
 The API now uses x402 **v2** (`PAYMENT-REQUIRED`, `PAYMENT-SIGNATURE`,
 `PAYMENT-RESPONSE`). Older `X-PAYMENT` clients must upgrade.
 
-Sales are disabled by default (`X402_ENABLED = "false"`). Disabled or invalid
-configuration returns 503 and discovery advertises no payable offers.
+Sales are disabled by default (`X402_ENABLED = "false"`). When disabled, discovery
+returns HTTP 200 with `"available": false` and an empty `"accepts"` array (not 503).
+A 503 is returned only when payment is attempted but configuration is invalid.
 Before enabling, set a nonzero `X402_PAY_TO` address and a facilitator whose
 `/supported` response includes v2 / exact / `eip155:8453`. The existing
 `https://x402.org/facilitator` value is not proof of Base mainnet support.

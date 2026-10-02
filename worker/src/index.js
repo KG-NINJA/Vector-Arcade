@@ -127,6 +127,18 @@ export default {
       });
     }
 
+    // Readiness endpoint: reports whether Stripe checkout is configured
+    if (url.pathname === "/ready" && req.method === "GET") {
+      const stripeReady = !!env.STRIPE_SECRET_KEY && !!env.PRICE_ID_PACK_1 && !!env.SESSIONS;
+      return json({
+        ready: stripeReady,
+        checkout: stripeReady,
+        stripe: !!env.STRIPE_SECRET_KEY,
+        price: !!env.PRICE_ID_PACK_1,
+        sessions: !!env.SESSIONS,
+      }, stripeReady ? 200 : 503);
+    }
+
     if (url.pathname === "/checkout" && req.method === "POST") {
       try {
         return await createCheckoutSession(req, env);

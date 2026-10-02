@@ -228,15 +228,33 @@
     // Diablo 1-inspired with tilemap, lighting, particles
     // =====================================================
 
-    // Coin gate: check if player has valid play time or is in iframe from lobby
+    // Coin gate: check if player has valid play time or is in trusted lobby iframe
+    const LOBBY_ORIGIN = "https://kg-ninja.github.io";
     const LOBBY_URL = "https://kg-ninja.github.io/Vector-Arcade/";
     const WORKER_BASE = "https://vector-arcade-coins.fuwafuwow.workers.dev";
     const PLAY_MS = 7 * 60 * 1000;
-    const isInIframe = window.self !== window.top;
+
+    // Verify iframe parent is the trusted lobby origin (not just any iframe)
+    function isInTrustedLobby() {
+      if (window.self === window.top) return false;
+      try {
+        // Attempt to access parent origin - will throw if cross-origin
+        const parentOrigin = window.parent.location.origin;
+        return parentOrigin === LOBBY_ORIGIN;
+      } catch (e) {
+        // Cross-origin access denied - check via document.referrer as fallback
+        return document.referrer.startsWith(LOBBY_ORIGIN + "/");
+      }
+    }
 
     function hasValidPlayTime() {
       const raw = Number(localStorage.getItem("activePlayUntil") ?? 0);
       return raw > Date.now();
+    }
+
+    function getRemainingPlayTime() {
+      const raw = Number(localStorage.getItem("activePlayUntil") ?? 0);
+      return Math.max(0, raw - Date.now());
     }
 
     function getCoins() {
@@ -245,6 +263,25 @@
 
     function showCoinGate() {
       const container = document.getElementById("game-container");
+      const hasFreeCoin = localStorage.getItem("has_free_coin");
+      const currentCoins = getCoins();
+      
+      // Determine button text and action based on coin state
+      const canUseFreeDemo = !hasFreeCoin;
+      const hasCoinsToSpend = currentCoins > 0;
+      
+      let buttonText, buttonStyle;
+      if (canUseFreeDemo) {
+        buttonText = "TRY FREE DEMO (1 COIN)";
+        buttonStyle = "border: 2px solid var(--gold); color: var(--gold);";
+      } else if (hasCoinsToSpend) {
+        buttonText = `INSERT COIN (${currentCoins} AVAILABLE)`;
+        buttonStyle = "border: 2px solid var(--gold); color: var(--gold);";
+      } else {
+        buttonText = "NO COINS - VISIT LOBBY";
+        buttonStyle = "border: 2px solid var(--text-dim); color: var(--text-dim); opacity: 0.6;";
+      }
+
       container.innerHTML = `
         <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; text-align: center; padding: 20px;">
           <div class="title" style="font-size: 24px; margin-bottom: 30px;">⚔ BLOOD CRYPT ⚔</div>
@@ -260,8 +297,8 @@
             <a href="${LOBBY_URL}" style="display: inline-block; padding: 12px 24px; border: 2px solid var(--gold); color: var(--gold); text-decoration: none; font-size: 10px;">
               → ENTER ARCADE LOBBY
             </a>
-            <button id="demoPlayBtn" style="padding: 12px 24px; border: 2px solid var(--text-dim); background: transparent; color: var(--text-dim); font-size: 10px; cursor: pointer;">
-              DEMO MODE (1 FREE COIN)
+            <button id="insertCoinBtn" style="padding: 12px 24px; background: transparent; font-size: 10px; cursor: pointer; ${buttonStyle}">
+              ${buttonText}
             </button>
           </div>
           <div style="margin-top: 40px; font-size: 8px; color: var(--text-dim); line-height: 2;">
@@ -271,27 +308,35 @@
         </div>
       `;
       
-      document.getElementById("demoPlayBtn").addEventListener("click", () => {
-        const storedCoins = localStorage.getItem("coins");
-        const hasFreeCoin = localStorage.getItem("has_free_coin");
-        let coins = storedCoins === null ? 1 : Number(storedCoins);
-        if (!hasFreeCoin && coins <= 0) {
-          coins = 1;
+      document.getElementById("insertCoinBtn").addEventListener("click", () => {
+        const hasFreeCoinNow = localStorage.getItem("has_free_coin");
+        let coins = getCoins();
+        
+        // Free demo: grant and immediately use the one-time free coin
+        if (!hasFreeCoinNow) {
           localStorage.setItem("has_free_coin", "1");
+          // Free demo doesn't add to coin balance - just grants play time
+          localStorage.setItem("activePlayUntil", String(Date.now() + PLAY_MS));
+          location.reload();
+          return;
         }
+        
+        // Paid coin: deduct from balance
         if (coins > 0) {
           coins--;
-          localStorage.setItem("coins", coins);
+          localStorage.setItem("coins", String(coins));
           localStorage.setItem("activePlayUntil", String(Date.now() + PLAY_MS));
           location.reload();
         } else {
-          alert("No coins available. Visit the arcade lobby to purchase coins.");
+          // No coins - redirect to lobby
+          window.location.href = LOBBY_URL;
         }
       });
     }
 
-    // Gate check: skip if in iframe (lobby handles it) or if play time is valid
-    const shouldShowGate = !isInIframe && !hasValidPlayTime();
+    // Gate check: skip if in trusted lobby iframe (which handles coin check) or if play time is valid
+    const isFromTrustedLobby = isInTrustedLobby();
+    const shouldShowGate = !isFromTrustedLobby && !hasValidPlayTime();
 
     if (shouldShowGate) {
       document.addEventListener("DOMContentLoaded", showCoinGate);
@@ -757,6 +802,7 @@
         this.CELL_STAIRS = 2;
         this.CELL_DOOR = 3;
         this.playerLastRoom = -1;
+        this.timeExpired = false;
       }
 
       setupAudio() {
@@ -1367,6 +1413,16 @@
         if (gameState.paused || gameState.gameOver) {
           this.handlePauseInput();
           return;
+        }
+
+        // Check play time expiry (7-minute limit enforcement)
+        if (!isFromTrustedLobby && !this.timeExpired) {
+          const remaining = getRemainingPlayTime();
+          if (remaining <= 0) {
+            this.timeExpired = true;
+            this.showTimeExpiredOverlay();
+            return;
+          }
         }
 
         this.updatePlayer(delta);
@@ -2047,6 +2103,50 @@
         if (this.overlayBg) this.overlayBg.destroy();
         if (this.overlayText) this.overlayText.destroy();
         if (this.overlaySubtext) this.overlaySubtext.destroy();
+      }
+
+      showTimeExpiredOverlay() {
+        gameState.paused = true;
+        
+        if (this.overlayBg) this.overlayBg.destroy();
+        if (this.overlayText) this.overlayText.destroy();
+        if (this.overlaySubtext) this.overlaySubtext.destroy();
+
+        const w = this.cameras.main.width;
+        const h = this.cameras.main.height;
+        const cx = this.cameras.main.scrollX + w / 2;
+        const cy = this.cameras.main.scrollY + h / 2;
+
+        this.overlayBg = this.add.rectangle(cx, cy, w, h, 0x000000, 0.95).setDepth(200);
+
+        this.overlayText = this.add.text(cx, cy - 40, 'TIME EXPIRED', {
+          fontSize: '24px',
+          fontFamily: 'Press Start 2P',
+          color: '#ff6644'
+        }).setOrigin(0.5).setDepth(201);
+
+        const floorName = FLOOR_NAMES[gameState.floor - 1] || `DEPTH ${gameState.floor}`;
+        const stats = `${floorName}\nSLAIN: ${gameState.kills}  GOLD: ${gameState.gold}\n\nINSERT COIN TO CONTINUE`;
+        this.overlaySubtext = this.add.text(cx, cy + 30, stats, {
+          fontSize: '8px',
+          fontFamily: 'Press Start 2P',
+          color: '#b8a67a',
+          align: 'center',
+          lineSpacing: 8
+        }).setOrigin(0.5).setDepth(201);
+
+        // Add button to return to coin gate
+        const btnText = this.add.text(cx, cy + 100, '[ CLICK TO INSERT COIN ]', {
+          fontSize: '10px',
+          fontFamily: 'Press Start 2P',
+          color: '#c9a227'
+        }).setOrigin(0.5).setDepth(201).setInteractive({ useHandCursor: true });
+
+        btnText.on('pointerdown', () => {
+          // Clear play time and reload to show coin gate
+          localStorage.removeItem('activePlayUntil');
+          location.reload();
+        });
       }
 
       restartGame() {
