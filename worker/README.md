@@ -7,6 +7,61 @@
 - Exposes `/redeem` so the frontend can claim coins using `session_id`
 - Exposes x402 discovery and a paid system-package endpoint for AI agents
 
+## Operator Checklist: Deploy & Enable Sales
+
+Before the arcade can accept real payments, complete these steps:
+
+### 1. Deploy the Worker
+
+```bash
+cd worker
+npm ci
+npm run check
+npm run test
+npm run deploy
+```
+
+### 2. Verify Worker is reachable
+
+```bash
+curl -I https://vector-arcade-coins.fuwafuwow.workers.dev/.well-known/x402
+# Should return HTTP 200 (or 503 if X402_ENABLED=false, which is expected)
+# A 404 means the Worker is not deployed or routes are not bound
+```
+
+### 3. Configure Stripe for human purchases
+
+1. Set Wrangler secrets (see Setup section below)
+2. Create Stripe webhook pointing to `/webhook` with `checkout.session.completed` event
+3. Verify `/checkout` returns a Stripe session URL
+
+### 4. Enable x402 agent sales (optional)
+
+Before setting `X402_ENABLED=true`:
+
+1. Set `X402_PAY_TO` to a valid KG-NINJA-owned Base mainnet address
+2. Set `X402_FACILITATOR_URL` to a facilitator supporting x402 v2 exact eip155:8453
+3. Verify the facilitator's `/supported` endpoint confirms Base mainnet + USDC
+4. Create the AGENT_PURCHASES Durable Object (run migration or deploy)
+
+```bash
+# Verify discovery shows available offers
+curl https://vector-arcade-coins.fuwafuwow.workers.dev/.well-known/x402
+# Response should include "available": true and non-empty "accepts" array
+```
+
+### 5. Frontend integration status
+
+The arcade frontend (GitHub Pages) automatically:
+- Shows [ONLINE]/[OFFLINE] status based on Worker health check
+- Enables BUY COINS button only when Worker is reachable
+- Falls back to demo mode (1 free coin per browser) when offline
+- Handles Stripe redirect with session_id redemption
+
+No frontend changes needed when enabling the Worker.
+
+---
+
 ## Setup
 1) Create a KV namespace named `SESSIONS` in Cloudflare.
 2) Put the KV namespace ID into `wrangler.toml`.

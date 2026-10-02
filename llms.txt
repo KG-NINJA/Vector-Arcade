@@ -1,13 +1,43 @@
 # Vector Arcade
 
 Browser arcade with Stripe coin purchases and an x402 API for AI agents.
-The agent product is a structured integration blueprint, not game coins.
 Source code is publicly available at no charge.
 
+## Status
+
+The payment Worker may be offline or undeployed. Check discovery before
+attempting any purchase. A 404 or 503 indicates the Worker is unavailable.
+The arcade frontend operates in demo mode when the Worker is unreachable.
+
+## Games
+
+- MARINEO: Vector platformer
+- WIREFRAME CITYSHOOTER: First-person shooter
+- HEX FRONTLINE: Tactical strategy
+- VECTOR ORB FALL: Arcade action
+- VECTOR DUEL RONDE: Fighting game
+- BLOOD CRYPT: Diablo-inspired dungeon crawler (Phaser 3)
+
+## Human Purchases
+
+Buy coins via Stripe checkout at the lobby. 1 coin = 7 minutes of play.
+The lobby shows [ONLINE] or [OFFLINE] status in the footer.
+
+## Agent Purchases
+
+The agent product is a structured integration blueprint, not game coins.
+
 - Source: https://github.com/KG-NINJA/Vector-Arcade
-- Agent availability and terms: https://vector-arcade-coins.fuwafuwow.workers.dev/.well-known/x402
+- Discovery: https://vector-arcade-coins.fuwafuwow.workers.dev/.well-known/x402
 - OpenAPI: https://vector-arcade-coins.fuwafuwow.workers.dev/openapi.json
 - Purchase: https://vector-arcade-coins.fuwafuwow.workers.dev/x402/vector-arcade-system
 
 Read discovery before paying. A 503 indicates sales are unavailable.
 After an uncertain settlement, do not issue another payment.
+
+## Requirements for Live Sales
+
+1. Worker must be deployed to Cloudflare
+2. Worker routes/custom domain must be bound
+3. GET /.well-known/x402 must return 200
+4. For x402: X402_ENABLED=true and valid payTo/facilitator required

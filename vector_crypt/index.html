@@ -215,6 +215,73 @@
     // Diablo 1-inspired with tilemap, lighting, particles
     // =====================================================
 
+    // Coin gate: check if player has valid play time or is in iframe from lobby
+    const LOBBY_URL = "https://kg-ninja.github.io/Vector-Arcade/";
+    const WORKER_BASE = "https://vector-arcade-coins.fuwafuwow.workers.dev";
+    const PLAY_MS = 7 * 60 * 1000;
+    const isInIframe = window.self !== window.top;
+
+    function hasValidPlayTime() {
+      const raw = Number(localStorage.getItem("activePlayUntil") ?? 0);
+      return raw > Date.now();
+    }
+
+    function getCoins() {
+      return Number(localStorage.getItem("coins") ?? 0);
+    }
+
+    function showCoinGate() {
+      const container = document.getElementById("game-container");
+      container.innerHTML = `
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; text-align: center; padding: 20px;">
+          <div class="title" style="font-size: 24px; margin-bottom: 30px;">⚔ BLOOD CRYPT ⚔</div>
+          <div style="font-size: 12px; line-height: 2; margin-bottom: 30px; max-width: 400px;">
+            <span style="color: #c41e1e;">INSERT COIN TO PLAY</span><br><br>
+            Diablo-inspired dungeon crawler.<br>
+            Explore 3 floors. Slay the Demon Lord.<br>
+            1 COIN = 7 MINUTES
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 16px;">
+            <a href="${LOBBY_URL}" style="display: inline-block; padding: 12px 24px; border: 2px solid var(--gold); color: var(--gold); text-decoration: none; font-size: 10px;">
+              → ENTER ARCADE LOBBY
+            </a>
+            <button id="demoPlayBtn" style="padding: 12px 24px; border: 2px solid var(--text-dim); background: transparent; color: var(--text-dim); font-size: 10px; cursor: pointer;">
+              DEMO MODE (1 FREE COIN)
+            </button>
+          </div>
+          <div style="margin-top: 40px; font-size: 8px; color: var(--text-dim); line-height: 2;">
+            Buy coins at the lobby · Supports Stripe checkout<br>
+            AI agents: <a href="${WORKER_BASE}/.well-known/x402" style="color: var(--text-dim);">x402 API</a>
+          </div>
+        </div>
+      `;
+      
+      document.getElementById("demoPlayBtn").addEventListener("click", () => {
+        const storedCoins = localStorage.getItem("coins");
+        const hasFreeCoin = localStorage.getItem("has_free_coin");
+        let coins = storedCoins === null ? 1 : Number(storedCoins);
+        if (!hasFreeCoin && coins <= 0) {
+          coins = 1;
+          localStorage.setItem("has_free_coin", "1");
+        }
+        if (coins > 0) {
+          coins--;
+          localStorage.setItem("coins", coins);
+          localStorage.setItem("activePlayUntil", String(Date.now() + PLAY_MS));
+          location.reload();
+        } else {
+          alert("No coins available. Visit the arcade lobby to purchase coins.");
+        }
+      });
+    }
+
+    // Gate check: skip if in iframe (lobby handles it) or if play time is valid
+    const shouldShowGate = !isInIframe && !hasValidPlayTime();
+
+    if (shouldShowGate) {
+      document.addEventListener("DOMContentLoaded", showCoinGate);
+    }
+
     const TILE = 48;
     const MAP_W = 40;
     const MAP_H = 30;
@@ -1656,26 +1723,29 @@
     // =====================================================
     // Phaser Game Configuration
     // =====================================================
-    const config = {
-      type: Phaser.AUTO,
-      parent: 'game-container',
-      width: window.innerWidth,
-      height: window.innerHeight,
-      pixelArt: true,
-      backgroundColor: '#0a0806',
-      scale: {
-        mode: Phaser.Scale.RESIZE,
-        autoCenter: Phaser.Scale.CENTER_BOTH
-      },
-      scene: [BootScene, GameScene]
-    };
+    // Only initialize Phaser if gate is passed
+    if (!shouldShowGate) {
+      const config = {
+        type: Phaser.AUTO,
+        parent: 'game-container',
+        width: window.innerWidth,
+        height: window.innerHeight,
+        pixelArt: true,
+        backgroundColor: '#0a0806',
+        scale: {
+          mode: Phaser.Scale.RESIZE,
+          autoCenter: Phaser.Scale.CENTER_BOTH
+        },
+        scene: [BootScene, GameScene]
+      };
 
-    const game = new Phaser.Game(config);
+      const game = new Phaser.Game(config);
 
-    // Handle window resize
-    window.addEventListener('resize', () => {
-      game.scale.resize(window.innerWidth, window.innerHeight);
-    });
+      // Handle window resize
+      window.addEventListener('resize', () => {
+        game.scale.resize(window.innerWidth, window.innerHeight);
+      });
+    }
   </script>
 </body>
 </html>
