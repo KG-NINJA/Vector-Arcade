@@ -1,848 +1,1681 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>BLOOD CRYPT</title>
-    <style>
-      @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
-      :root {
-        --bg: #0a0806;
-        --panel: #1a1410;
-        --panel-border: #3d2e1f;
-        --gold: #c9a227;
-        --hp-red: #8b1e1e;
-        --hp-fill: #c41e1e;
-        --text: #b8a67a;
-        --text-dim: #6b5d45;
-      }
-      html, body {
-        margin: 0;
-        padding: 0;
-        width: 100%;
-        height: 100%;
-        overflow: hidden;
-        background: var(--bg);
-        color: var(--text);
-        font-family: 'Press Start 2P', monospace;
-        image-rendering: pixelated;
-        image-rendering: crisp-edges;
-      }
-      #game {
-        width: 100%;
-        height: 100%;
-        display: block;
-        image-rendering: pixelated;
-        image-rendering: crisp-edges;
-      }
-      #hud {
-        position: fixed;
-        top: 8px;
-        left: 8px;
-        border: 3px solid var(--panel-border);
-        background: linear-gradient(180deg, #1f1812 0%, #120e0a 100%);
-        padding: 12px 16px;
-        font-size: 8px;
-        line-height: 2;
-        pointer-events: none;
-        min-width: 130px;
-        box-shadow: inset 0 0 10px rgba(0,0,0,0.8), 0 0 8px rgba(0,0,0,0.9);
-      }
-      #hud::before {
-        content: '';
-        position: absolute;
-        top: 2px; left: 2px; right: 2px; bottom: 2px;
-        border: 1px solid #2a2015;
-        pointer-events: none;
-      }
-      .title {
-        color: var(--gold);
-        font-size: 10px;
-        text-shadow: 2px 2px 0 #000;
-        margin-bottom: 6px;
-      }
-      #help {
-        position: fixed;
-        right: 8px;
-        bottom: 8px;
-        border: 3px solid var(--panel-border);
-        background: linear-gradient(180deg, #1f1812 0%, #120e0a 100%);
-        color: var(--text-dim);
-        padding: 10px 12px;
-        font-size: 7px;
-        line-height: 2.2;
-        pointer-events: none;
-        box-shadow: inset 0 0 10px rgba(0,0,0,0.8);
-      }
-      .warn { color: #c41e1e; }
-      .gold { color: var(--gold); }
-      .hp { color: #e85050; }
-      #skillbar {
-        position: fixed;
-        bottom: 10px;
-        left: 50%;
-        transform: translateX(-50%);
-        display: flex;
-        gap: 6px;
-        pointer-events: none;
-      }
-      .skill {
-        width: 44px;
-        height: 44px;
-        border: 3px solid var(--panel-border);
-        background: linear-gradient(180deg, #251c14 0%, #1a1410 100%);
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        font-size: 7px;
-        position: relative;
-        box-shadow: inset 0 0 8px rgba(0,0,0,0.7);
-      }
-      .skill .key { font-size: 6px; color: var(--text-dim); margin-bottom: 3px; }
-      .skill .cd-overlay {
-        position: absolute;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        background: rgba(0, 0, 0, 0.8);
-        color: #666;
-        font-size: 7px;
-        text-align: center;
-      }
-      .skill.ready {
-        border-color: var(--gold);
-        box-shadow: inset 0 0 12px rgba(201, 162, 39, 0.3);
-      }
-    </style>
-  </head>
-  <body>
-    <canvas id="game"></canvas>
-    <div id="hud">
-      <div class="title">BLOOD CRYPT</div>
-      FLOOR <span id="floor">1</span>/3<br />
-      <span class="hp">LIFE <span id="hp">100</span>/<span id="hpMax">100</span></span><br />
-      <span class="gold">GOLD <span id="gold">0</span></span><br />
-      KILLS <span id="kills">0</span><br />
-      <span id="status">DESCEND...</span>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BLOOD CRYPT</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+    :root {
+      --bg: #0a0806;
+      --panel: #1a1410;
+      --panel-border: #3d2e1f;
+      --gold: #c9a227;
+      --hp-red: #8b1e1e;
+      --hp-fill: #c41e1e;
+      --text: #b8a67a;
+      --text-dim: #6b5d45;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Press Start 2P', monospace;
+      image-rendering: pixelated;
+    }
+    #game-container {
+      width: 100%; height: 100%;
+      position: relative;
+    }
+    canvas { display: block; image-rendering: pixelated; }
+
+    /* HUD Overlay */
+    #hud {
+      position: fixed;
+      top: 12px; left: 12px;
+      border: 3px solid var(--panel-border);
+      background: linear-gradient(180deg, rgba(31,24,18,0.95) 0%, rgba(18,14,10,0.95) 100%);
+      padding: 14px 18px;
+      font-size: 9px;
+      line-height: 2;
+      pointer-events: none;
+      min-width: 150px;
+      box-shadow: inset 0 0 15px rgba(0,0,0,0.9), 0 0 20px rgba(0,0,0,0.95), 0 2px 8px rgba(0,0,0,0.8);
+      z-index: 100;
+    }
+    #hud::before {
+      content: '';
+      position: absolute;
+      top: 3px; left: 3px; right: 3px; bottom: 3px;
+      border: 1px solid #2a2015;
+      pointer-events: none;
+    }
+    #hud::after {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: url("data:image/svg+xml,%3Csvg width='4' height='4' xmlns='http://www.w3.org/2000/svg'%3E%3Crect width='1' height='1' fill='rgba(0,0,0,0.15)'/%3E%3C/svg%3E");
+      pointer-events: none;
+      opacity: 0.5;
+    }
+    .title {
+      color: var(--gold);
+      font-size: 12px;
+      text-shadow: 2px 2px 0 #000, 0 0 10px rgba(201,162,39,0.5);
+      margin-bottom: 8px;
+      letter-spacing: 1px;
+    }
+    .hp-bar-container {
+      background: #1a0a0a;
+      border: 2px solid #3a1a1a;
+      height: 14px;
+      margin: 4px 0 6px 0;
+      position: relative;
+      box-shadow: inset 0 0 5px rgba(0,0,0,0.8);
+    }
+    .hp-bar-fill {
+      height: 100%;
+      background: linear-gradient(180deg, #d42020 0%, #8b1515 50%, #6b1010 100%);
+      transition: width 0.2s ease;
+      box-shadow: 0 0 8px rgba(200,30,30,0.4);
+    }
+    .hp-bar-text {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 7px;
+      color: #fff;
+      text-shadow: 1px 1px 0 #000;
+    }
+    #help {
+      position: fixed;
+      right: 12px; bottom: 12px;
+      border: 3px solid var(--panel-border);
+      background: linear-gradient(180deg, rgba(31,24,18,0.95) 0%, rgba(18,14,10,0.95) 100%);
+      color: var(--text-dim);
+      padding: 12px 14px;
+      font-size: 7px;
+      line-height: 2.4;
+      pointer-events: none;
+      box-shadow: inset 0 0 15px rgba(0,0,0,0.9), 0 0 20px rgba(0,0,0,0.95);
+      z-index: 100;
+    }
+    .warn { color: #c41e1e; }
+    .gold { color: var(--gold); }
+    .hp-text { color: #e85050; }
+
+    #skillbar {
+      position: fixed;
+      bottom: 14px; left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 8px;
+      pointer-events: none;
+      z-index: 100;
+    }
+    .skill {
+      width: 52px; height: 52px;
+      border: 3px solid var(--panel-border);
+      background: linear-gradient(180deg, rgba(37,28,20,0.95) 0%, rgba(26,20,16,0.95) 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-size: 8px;
+      position: relative;
+      box-shadow: inset 0 0 10px rgba(0,0,0,0.8), 0 2px 6px rgba(0,0,0,0.7);
+    }
+    .skill .icon {
+      font-size: 16px;
+      margin-bottom: 2px;
+    }
+    .skill .key {
+      font-size: 6px;
+      color: var(--text-dim);
+    }
+    .skill .cd-overlay {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      background: rgba(0, 0, 0, 0.85);
+      color: #888;
+      font-size: 8px;
+      text-align: center;
+      transition: height 0.1s linear;
+    }
+    .skill.ready {
+      border-color: var(--gold);
+      box-shadow: inset 0 0 15px rgba(201, 162, 39, 0.4), 0 0 12px rgba(201, 162, 39, 0.3);
+    }
+    .skill.ready .icon { text-shadow: 0 0 8px rgba(255, 200, 100, 0.8); }
+
+    #minimap {
+      position: fixed;
+      top: 12px; right: 12px;
+      width: 120px; height: 90px;
+      border: 3px solid var(--panel-border);
+      background: rgba(10, 8, 6, 0.9);
+      box-shadow: inset 0 0 10px rgba(0,0,0,0.9);
+      z-index: 100;
+      pointer-events: none;
+    }
+    #minimap canvas {
+      width: 100%; height: 100%;
+    }
+  </style>
+</head>
+<body>
+  <div id="game-container"></div>
+
+  <div id="hud">
+    <div class="title">⚔ BLOOD CRYPT ⚔</div>
+    FLOOR <span id="floor">1</span>/3<br />
+    <div class="hp-bar-container">
+      <div class="hp-bar-fill" id="hpBar" style="width: 100%"></div>
+      <div class="hp-bar-text"><span id="hp">100</span>/<span id="hpMax">100</span></div>
     </div>
-    <div id="skillbar">
-      <div class="skill" id="skillQ"><span class="key">[Q]</span>FIRE</div>
-      <div class="skill" id="skillE"><span class="key">[E]</span>HEAL</div>
+    <span class="gold">💰 <span id="gold">0</span></span><br />
+    ☠ KILLS <span id="kills">0</span><br />
+    <span id="status">DESCEND...</span>
+  </div>
+
+  <div id="skillbar">
+    <div class="skill" id="skillMelee">
+      <span class="icon">⚔</span>
+      <span class="key">[SPACE]</span>
     </div>
-    <div id="help">
-      WASD MOVE<br />
-      SPACE ATTACK<br />
-      Q FIRE · E HEAL<br />
-      FIND STAIRS DOWN<br />
-      SLAY THE DEMON LORD
+    <div class="skill" id="skillQ">
+      <span class="icon">🔥</span>
+      <span class="key">[Q]</span>
     </div>
+    <div class="skill" id="skillE">
+      <span class="icon">💚</span>
+      <span class="key">[E]</span>
+    </div>
+  </div>
 
-    <script>
-      const canvas = document.getElementById("game");
-      const ctx = canvas.getContext("2d");
-      ctx.imageSmoothingEnabled = false;
+  <div id="help">
+    WASD / ARROWS MOVE<br />
+    SPACE MELEE ATTACK<br />
+    Q FIREBALL · E HEAL<br />
+    P PAUSE · R RESTART<br />
+    FIND STAIRS DOWN<br />
+    SLAY THE DEMON LORD
+  </div>
 
-      const hudFloor = document.getElementById("floor");
-      const hudHp = document.getElementById("hp");
-      const hudHpMax = document.getElementById("hpMax");
-      const hudGold = document.getElementById("gold");
-      const hudKills = document.getElementById("kills");
-      const hudStatus = document.getElementById("status");
-      const skillQEl = document.getElementById("skillQ");
-      const skillEEl = document.getElementById("skillE");
+  <div id="minimap">
+    <canvas id="minimapCanvas"></canvas>
+  </div>
 
-      const TILE = 48;
-      const MAP_W = 32;
-      const MAP_H = 24;
-      const PLAYER_SPEED = 140;
-      const PLAYER_HP = 100;
-      const PLAYER_ATK = 18;
-      const PLAYER_ATK_RANGE = 55;
-      const PLAYER_ATK_CD = 0.4;
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"></script>
+  <script>
+    // =====================================================
+    // BLOOD CRYPT - Phaser 3 Dungeon Crawler
+    // Diablo 1-inspired with tilemap, lighting, particles
+    // =====================================================
 
-      const FIREBALL_CD = 3;
-      const FIREBALL_DMG = 40;
-      const FIREBALL_SPEED = 280;
+    const TILE = 48;
+    const MAP_W = 40;
+    const MAP_H = 30;
+    const PLAYER_SPEED = 160;
+    const PLAYER_HP = 100;
+    const PLAYER_ATK = 20;
+    const PLAYER_ATK_RANGE = 60;
+    const PLAYER_ATK_CD = 350;
+    const FIREBALL_CD = 3000;
+    const FIREBALL_DMG = 45;
+    const FIREBALL_SPEED = 320;
+    const HEAL_CD = 12000;
+    const HEAL_AMOUNT = 45;
+    const ENEMY_SPEED = 60;
+    const ENEMY_HP = 40;
+    const ENEMY_DMG = 14;
+    const ENEMY_ATK_RANGE = 50;
+    const ENEMY_ATK_CD = 900;
+    const BOSS_HP = 300;
+    const BOSS_DMG = 28;
+    const BOSS_SPEED = 50;
+    const MAX_FLOOR = 3;
 
-      const HEAL_CD = 12;
-      const HEAL_AMOUNT = 40;
+    const PAL = {
+      black: 0x0a0806,
+      floor1: 0x2a231c, floor2: 0x352c24, floor3: 0x1f1a15, floorAccent: 0x3d3428,
+      wall1: 0x4a3d2f, wall2: 0x5c4b3a, wall3: 0x3d3225, wallTop: 0x2a231c, wallHighlight: 0x6d5a48,
+      stairs: 0x8b7355, stairsHighlight: 0xa08a66,
+      player1: 0xc9a27a, player2: 0x8b6b4a, player3: 0x5c4530, playerArmor: 0x4a5568, playerSword: 0xb0b0b0,
+      demon1: 0x8b2020, demon2: 0x5c1515, demon3: 0x3d0a0a, demonEye: 0xffcc00,
+      boss1: 0x6b1a1a, boss2: 0x4a1010, bossHorn: 0x3d2a1a,
+      gold1: 0xc9a227, gold2: 0x8b7020, gold3: 0xffe066,
+      potion: 0xc41e1e, potionGlass: 0x4a6080, potionHighlight: 0xff6666,
+      fire1: 0xff6622, fire2: 0xffaa33, fire3: 0xffdd66,
+      blood: 0x5c1515, bloodDark: 0x3d0a0a,
+      torch: 0xff8844
+    };
 
-      const ENEMY_SPEED = 55;
-      const ENEMY_HP = 35;
-      const ENEMY_DMG = 12;
-      const ENEMY_ATK_RANGE = 44;
-      const ENEMY_ATK_CD = 1.0;
+    let gameState = {
+      floor: 1,
+      kills: 0,
+      gold: 0,
+      paused: false,
+      gameOver: false,
+      victory: false,
+      status: "DESCEND..."
+    };
 
-      const BOSS_HP = 250;
-      const BOSS_DMG = 25;
-      const BOSS_SPEED = 45;
+    // HUD Elements
+    const hudFloor = document.getElementById("floor");
+    const hudHp = document.getElementById("hp");
+    const hudHpMax = document.getElementById("hpMax");
+    const hudHpBar = document.getElementById("hpBar");
+    const hudGold = document.getElementById("gold");
+    const hudKills = document.getElementById("kills");
+    const hudStatus = document.getElementById("status");
+    const skillMeleeEl = document.getElementById("skillMelee");
+    const skillQEl = document.getElementById("skillQ");
+    const skillEEl = document.getElementById("skillE");
+    const minimapCanvas = document.getElementById("minimapCanvas");
+    const minimapCtx = minimapCanvas.getContext("2d");
 
-      const MAX_FLOOR = 3;
+    // =====================================================
+    // Boot Scene - Generate all textures procedurally
+    // =====================================================
+    class BootScene extends Phaser.Scene {
+      constructor() { super({ key: 'BootScene' }); }
 
-      const PAL = {
-        black: "#0a0806",
-        floor1: "#2a231c", floor2: "#352c24", floor3: "#1f1a15",
-        wall1: "#4a3d2f", wall2: "#5c4b3a", wall3: "#3d3225", wallTop: "#2a231c",
-        stairs: "#8b7355",
-        player1: "#c9a27a", player2: "#8b6b4a", player3: "#5c4530", playerArmor: "#4a5568", playerSword: "#a0a0a0",
-        demon1: "#8b2020", demon2: "#5c1515", demon3: "#3d0a0a", demonEye: "#ffcc00",
-        boss1: "#6b1a1a", boss2: "#4a1010", bossHorn: "#3d2a1a",
-        gold1: "#c9a227", gold2: "#8b7020", gold3: "#5c4a15",
-        potion: "#c41e1e", potionGlass: "#4a6080",
-        fire1: "#ff6622", fire2: "#ffaa33", fire3: "#ffdd66",
-        blood: "#5c1515", bloodDark: "#3d0a0a",
-        torch: "#ff8844", torchGlow: "rgba(255,136,68,0.15)"
-      };
+      create() {
+        this.generateTextures();
+        this.scene.start('GameScene');
+      }
 
-      let audioCtx = null;
-      let audioEnabled = false;
+      generateTextures() {
+        const g = this.make.graphics({ x: 0, y: 0, add: false });
 
-      function ensureAudio() {
-        if (!audioCtx) {
+        // Floor tile with stone texture
+        g.clear();
+        g.fillStyle(PAL.floor1);
+        g.fillRect(0, 0, TILE, TILE);
+        for (let i = 0; i < 6; i++) {
+          g.fillStyle(PAL.floor2);
+          g.fillRect(4 + (i * 7) % 32, 4 + (i * 11) % 28, 8, 6);
+        }
+        for (let i = 0; i < 4; i++) {
+          g.fillStyle(PAL.floor3);
+          g.fillRect(8 + (i * 13) % 28, 8 + (i * 9) % 24, 4, 4);
+        }
+        g.fillStyle(PAL.floorAccent);
+        g.fillRect(2, 2, 2, 2);
+        g.fillRect(TILE - 4, TILE - 4, 2, 2);
+        g.lineStyle(1, 0x1a1510, 0.5);
+        g.strokeRect(0, 0, TILE, TILE);
+        g.generateTexture('floor', TILE, TILE);
+
+        // Wall tile with brick pattern
+        g.clear();
+        g.fillStyle(PAL.wall1);
+        g.fillRect(0, 0, TILE, TILE);
+        g.fillStyle(PAL.wall2);
+        g.fillRect(2, 2, TILE - 4, 10);
+        g.fillRect(2, 14, TILE - 4, 10);
+        g.fillRect(2, 26, TILE - 4, 10);
+        g.fillStyle(PAL.wall3);
+        g.fillRect(4, 4, TILE - 8, 6);
+        g.fillRect(4, 16, TILE - 8, 6);
+        g.fillRect(4, 28, TILE - 8, 6);
+        g.fillStyle(PAL.wallHighlight);
+        g.fillRect(6, 6, 3, 2);
+        g.fillRect(20, 18, 3, 2);
+        g.lineStyle(2, PAL.wallTop, 1);
+        g.strokeRect(0, 0, TILE, TILE);
+        g.generateTexture('wall', TILE, TILE);
+
+        // Wall top (shadow side)
+        g.clear();
+        g.fillStyle(PAL.wallTop);
+        g.fillRect(0, 0, TILE, TILE);
+        g.fillStyle(PAL.wall3);
+        g.fillRect(2, 0, TILE - 4, 8);
+        g.fillStyle(0x1a1510);
+        g.fillRect(0, TILE - 4, TILE, 4);
+        g.generateTexture('wallTop', TILE, TILE);
+
+        // Stairs
+        g.clear();
+        g.fillStyle(PAL.floor1);
+        g.fillRect(0, 0, TILE, TILE);
+        g.fillStyle(PAL.wall3);
+        g.fillRect(6, 8, 36, 32);
+        for (let i = 0; i < 4; i++) {
+          g.fillStyle(PAL.stairs);
+          g.fillRect(8 + i * 2, 10 + i * 7, 32 - i * 4, 6);
+          g.fillStyle(PAL.stairsHighlight);
+          g.fillRect(10 + i * 2, 11 + i * 7, 28 - i * 4, 2);
+        }
+        g.fillStyle(0x1a1510);
+        g.fillRect(6, 40, 4, 8);
+        g.fillRect(38, 40, 4, 8);
+        g.generateTexture('stairs', TILE, TILE);
+
+        // Player sprite sheet (4 frames: idle, walk1, walk2, attack)
+        for (let frame = 0; frame < 4; frame++) {
+          g.clear();
+          const bob = frame === 1 ? -2 : (frame === 2 ? 2 : 0);
+          const attacking = frame === 3;
+          
+          // Body/armor
+          g.fillStyle(PAL.playerArmor);
+          g.fillRect(14, 18 + bob, 20, 22);
+          g.fillStyle(PAL.player3);
+          g.fillRect(16, 20 + bob, 16, 18);
+          
+          // Head
+          g.fillStyle(PAL.player1);
+          g.fillRect(16, 6 + bob, 16, 14);
+          g.fillStyle(PAL.player2);
+          g.fillRect(18, 8 + bob, 12, 10);
+          // Eyes
+          g.fillStyle(0x1a1a1a);
+          g.fillRect(18, 12 + bob, 3, 3);
+          g.fillRect(27, 12 + bob, 3, 3);
+          // Helmet highlight
+          g.fillStyle(0x606878);
+          g.fillRect(17, 7 + bob, 14, 2);
+          
+          // Arms
+          g.fillStyle(PAL.player1);
+          g.fillRect(8, 22 + bob, 8, 12);
+          g.fillRect(32, 22 + bob, 8, 12);
+          
+          // Legs
+          g.fillStyle(PAL.player2);
+          g.fillRect(16, 40, 6, 10);
+          g.fillRect(26, 40, 6, 10);
+          
+          // Sword
+          g.fillStyle(PAL.playerSword);
+          if (attacking) {
+            g.fillRect(38, 16, 10, 4);
+            g.fillRect(44, 12, 4, 12);
+            g.fillStyle(0xffffff);
+            g.fillRect(46, 14, 2, 8);
+          } else {
+            g.fillRect(36, 24 + bob, 4, 20);
+            g.fillRect(34, 22 + bob, 8, 4);
+            g.fillStyle(0xffffff);
+            g.fillRect(37, 26 + bob, 2, 16);
+          }
+          
+          g.generateTexture('player_' + frame, TILE, TILE + 8);
+        }
+
+        // Demon sprite sheet (4 frames)
+        for (let frame = 0; frame < 4; frame++) {
+          g.clear();
+          const bob = frame % 2 === 1 ? -2 : 0;
+          const attacking = frame === 3;
+          
+          // Body
+          g.fillStyle(PAL.demon1);
+          g.fillRect(10, 20 + bob, 28, 24);
+          g.fillStyle(PAL.demon2);
+          g.fillRect(14, 24 + bob, 20, 16);
+          
+          // Head
+          g.fillStyle(PAL.demon1);
+          g.fillRect(14, 6 + bob, 20, 16);
+          g.fillStyle(PAL.demon2);
+          g.fillRect(16, 8 + bob, 16, 12);
+          // Eyes
+          g.fillStyle(PAL.demonEye);
+          g.fillRect(16, 12 + bob, 4, 4);
+          g.fillRect(28, 12 + bob, 4, 4);
+          g.fillStyle(0xff0000);
+          g.fillRect(17, 13 + bob, 2, 2);
+          g.fillRect(29, 13 + bob, 2, 2);
+          // Horns
+          g.fillStyle(PAL.demon3);
+          g.fillRect(12, 2 + bob, 4, 8);
+          g.fillRect(32, 2 + bob, 4, 8);
+          
+          // Arms/claws
+          g.fillStyle(PAL.demon1);
+          if (attacking) {
+            g.fillRect(2, 18 + bob, 10, 8);
+            g.fillRect(36, 18 + bob, 10, 8);
+          } else {
+            g.fillRect(4, 24 + bob, 8, 10);
+            g.fillRect(36, 24 + bob, 8, 10);
+          }
+          g.fillStyle(0x2a0a0a);
+          g.fillRect(attacking ? 0 : 4, attacking ? 20 : 32 + bob, 3, 4);
+          g.fillRect(attacking ? 45 : 41, attacking ? 20 : 32 + bob, 3, 4);
+          
+          // Legs
+          g.fillStyle(PAL.demon2);
+          g.fillRect(14, 42, 8, 8);
+          g.fillRect(26, 42, 8, 8);
+          
+          g.generateTexture('demon_' + frame, TILE, TILE + 8);
+        }
+
+        // Boss sprite sheet (4 frames, larger)
+        for (let frame = 0; frame < 4; frame++) {
+          g.clear();
+          const bob = frame % 2 === 1 ? -3 : 0;
+          const attacking = frame === 3;
+          const s = 1.6; // Scale factor
+          
+          // Body
+          g.fillStyle(PAL.boss1);
+          g.fillRect(8, 24 + bob, 48, 40);
+          g.fillStyle(PAL.boss2);
+          g.fillRect(14, 30 + bob, 36, 28);
+          
+          // Head
+          g.fillStyle(PAL.boss1);
+          g.fillRect(14, 4 + bob, 36, 24);
+          g.fillStyle(PAL.boss2);
+          g.fillRect(18, 8 + bob, 28, 16);
+          // Eyes
+          g.fillStyle(PAL.demonEye);
+          g.fillRect(20, 14 + bob, 8, 6);
+          g.fillRect(36, 14 + bob, 8, 6);
+          g.fillStyle(0xff0000);
+          g.fillRect(22, 16 + bob, 4, 3);
+          g.fillRect(38, 16 + bob, 4, 3);
+          // Crown/horns
+          g.fillStyle(PAL.bossHorn);
+          g.fillRect(8, -4 + bob, 8, 16);
+          g.fillRect(48, -4 + bob, 8, 16);
+          g.fillStyle(PAL.gold1);
+          g.fillRect(24, 0 + bob, 16, 6);
+          g.fillRect(28, -4 + bob, 8, 6);
+          
+          // Arms
+          g.fillStyle(PAL.boss1);
+          if (attacking) {
+            g.fillRect(-4, 20 + bob, 16, 14);
+            g.fillRect(52, 20 + bob, 16, 14);
+          } else {
+            g.fillRect(0, 32 + bob, 12, 18);
+            g.fillRect(52, 32 + bob, 12, 18);
+          }
+          
+          // Legs
+          g.fillStyle(PAL.boss2);
+          g.fillRect(16, 62, 12, 12);
+          g.fillRect(36, 62, 12, 12);
+          
+          g.generateTexture('boss_' + frame, 64, 80);
+        }
+
+        // Fireball (animated)
+        for (let frame = 0; frame < 4; frame++) {
+          g.clear();
+          const colors = [PAL.fire1, PAL.fire2, PAL.fire3, PAL.fire2];
+          const c = colors[frame];
+          g.fillStyle(c);
+          g.fillCircle(16, 16, 12);
+          g.fillStyle(PAL.fire3);
+          g.fillCircle(16, 16, 6);
+          g.fillStyle(0xffffff);
+          g.fillCircle(14, 14, 3);
+          g.generateTexture('fireball_' + frame, 32, 32);
+        }
+
+        // Gold pile
+        g.clear();
+        g.fillStyle(PAL.gold2);
+        g.fillRect(8, 16, 24, 12);
+        g.fillStyle(PAL.gold1);
+        g.fillRect(10, 12, 20, 8);
+        g.fillRect(12, 8, 16, 6);
+        g.fillStyle(PAL.gold3);
+        g.fillRect(14, 10, 4, 3);
+        g.fillRect(22, 14, 4, 3);
+        g.fillRect(16, 18, 3, 3);
+        g.generateTexture('gold', 40, 32);
+
+        // Health potion
+        g.clear();
+        g.fillStyle(PAL.potionGlass);
+        g.fillRect(14, 8, 12, 24);
+        g.fillRect(12, 10, 16, 20);
+        g.fillStyle(PAL.potion);
+        g.fillRect(14, 14, 12, 14);
+        g.fillStyle(PAL.potionHighlight);
+        g.fillRect(16, 16, 4, 8);
+        g.fillStyle(PAL.gold2);
+        g.fillRect(14, 6, 12, 4);
+        g.fillRect(16, 4, 8, 4);
+        g.generateTexture('potion', 40, 36);
+
+        // Torch (for decoration)
+        g.clear();
+        g.fillStyle(0x4a3020);
+        g.fillRect(6, 16, 4, 16);
+        g.fillStyle(PAL.torch);
+        g.fillRect(4, 8, 8, 10);
+        g.fillStyle(PAL.fire3);
+        g.fillRect(6, 4, 4, 8);
+        g.fillStyle(0xffffff);
+        g.fillRect(7, 6, 2, 4);
+        g.generateTexture('torch', 16, 32);
+
+        // Particle textures
+        g.clear();
+        g.fillStyle(0xffffff);
+        g.fillCircle(4, 4, 4);
+        g.generateTexture('particle', 8, 8);
+
+        g.clear();
+        g.fillStyle(PAL.blood);
+        g.fillCircle(6, 6, 6);
+        g.generateTexture('blood_particle', 12, 12);
+
+        g.destroy();
+      }
+    }
+
+    // =====================================================
+    // Main Game Scene
+    // =====================================================
+    class GameScene extends Phaser.Scene {
+      constructor() { super({ key: 'GameScene' }); }
+
+      create() {
+        this.setupState();
+        this.generateFloor(gameState.floor);
+        this.setupPlayer();
+        this.setupInputs();
+        this.setupLighting();
+        this.setupParticles();
+        this.setupCamera();
+        this.setupAudio();
+      }
+
+      setupState() {
+        this.map = [];
+        this.rooms = [];
+        this.torches = [];
+        this.enemies = [];
+        this.pickups = [];
+        this.projectiles = [];
+        this.CELL_WALL = 0;
+        this.CELL_FLOOR = 1;
+        this.CELL_STAIRS = 2;
+      }
+
+      setupAudio() {
+        this.audioCtx = null;
+        this.audioEnabled = false;
+      }
+
+      ensureAudio() {
+        if (!this.audioCtx) {
           const AC = window.AudioContext || window.webkitAudioContext;
           if (!AC) return false;
-          audioCtx = new AC();
+          this.audioCtx = new AC();
         }
-        if (audioCtx.state === "suspended") audioCtx.resume();
-        audioEnabled = true;
+        if (this.audioCtx.state === "suspended") this.audioCtx.resume();
+        this.audioEnabled = true;
         return true;
       }
 
-      function tone(type, freq, dur, vol, when = 0) {
-        if (!audioEnabled || !audioCtx) return;
-        const t = audioCtx.currentTime + when;
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
+      tone(type, freq, dur, vol, when = 0) {
+        if (!this.audioEnabled || !this.audioCtx) return;
+        const t = this.audioCtx.currentTime + when;
+        const osc = this.audioCtx.createOscillator();
+        const gain = this.audioCtx.createGain();
         osc.type = type;
         osc.frequency.setValueAtTime(freq, t);
         gain.gain.setValueAtTime(0.0001, t);
         gain.gain.exponentialRampToValueAtTime(vol, t + 0.01);
         gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
         osc.connect(gain);
-        gain.connect(audioCtx.destination);
+        gain.connect(this.audioCtx.destination);
         osc.start(t);
         osc.stop(t + dur + 0.02);
       }
 
-      function noise(vol = 0.1, dur = 0.12) {
-        if (!audioEnabled || !audioCtx) return;
-        const now = audioCtx.currentTime;
-        const samples = Math.floor(audioCtx.sampleRate * dur);
-        const buffer = audioCtx.createBuffer(1, samples, audioCtx.sampleRate);
+      noise(vol = 0.1, dur = 0.12) {
+        if (!this.audioEnabled || !this.audioCtx) return;
+        const now = this.audioCtx.currentTime;
+        const samples = Math.floor(this.audioCtx.sampleRate * dur);
+        const buffer = this.audioCtx.createBuffer(1, samples, this.audioCtx.sampleRate);
         const d = buffer.getChannelData(0);
-        for (let i = 0; i < samples; i++) {
-          d[i] = (Math.random() * 2 - 1) * (1 - i / samples) * 0.6;
-        }
-        const src = audioCtx.createBufferSource();
-        const flt = audioCtx.createBiquadFilter();
-        const g = audioCtx.createGain();
+        for (let i = 0; i < samples; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / samples) * 0.6;
+        const src = this.audioCtx.createBufferSource();
+        const flt = this.audioCtx.createBiquadFilter();
+        const g = this.audioCtx.createGain();
         src.buffer = buffer;
         flt.type = "lowpass";
         flt.frequency.value = 600;
         g.gain.setValueAtTime(0.0001, now);
         g.gain.exponentialRampToValueAtTime(vol, now + 0.01);
         g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
-        src.connect(flt).connect(g).connect(audioCtx.destination);
+        src.connect(flt).connect(g).connect(this.audioCtx.destination);
         src.start(now);
         src.stop(now + dur + 0.02);
       }
 
-      function sfxSwing() { tone("square", 280, 0.08, 0.05); noise(0.04, 0.06); }
-      function sfxHit() { tone("triangle", 180, 0.1, 0.06); noise(0.08, 0.1); }
-      function sfxPickup() { tone("square", 660, 0.06, 0.04); tone("square", 880, 0.08, 0.035, 0.06); }
-      function sfxFireball() { tone("sawtooth", 400, 0.12, 0.05); noise(0.06, 0.1); }
-      function sfxHeal() { tone("triangle", 440, 0.15, 0.05); tone("triangle", 660, 0.12, 0.04, 0.1); }
-      function sfxStairs() { tone("square", 330, 0.12, 0.05); tone("square", 440, 0.12, 0.05, 0.12); tone("square", 550, 0.15, 0.05, 0.24); }
-      function sfxDeath() { tone("sawtooth", 150, 0.3, 0.08); noise(0.15, 0.25); }
-      function sfxBossDeath() { tone("sawtooth", 100, 0.5, 0.1); tone("square", 80, 0.6, 0.08, 0.15); noise(0.2, 0.4); }
-      function sfxVictory() { tone("square", 392, 0.15, 0.06); tone("square", 494, 0.15, 0.06, 0.15); tone("square", 587, 0.2, 0.06, 0.3); tone("square", 784, 0.3, 0.06, 0.5); }
-      function sfxDefeat() { tone("square", 262, 0.2, 0.06); tone("square", 196, 0.25, 0.06, 0.2); tone("square", 147, 0.35, 0.06, 0.45); }
-      function sfxEnemyHit() { tone("triangle", 220, 0.06, 0.04); }
+      sfxSwing() { this.tone("square", 280, 0.08, 0.05); this.noise(0.04, 0.06); }
+      sfxHit() { this.tone("triangle", 180, 0.1, 0.06); this.noise(0.08, 0.1); }
+      sfxPickup() { this.tone("square", 660, 0.06, 0.04); this.tone("square", 880, 0.08, 0.035, 0.06); }
+      sfxFireball() { this.tone("sawtooth", 400, 0.12, 0.05); this.noise(0.06, 0.1); }
+      sfxHeal() { this.tone("triangle", 440, 0.15, 0.05); this.tone("triangle", 660, 0.12, 0.04, 0.1); }
+      sfxStairs() { this.tone("square", 330, 0.12, 0.05); this.tone("square", 440, 0.12, 0.05, 0.12); this.tone("square", 550, 0.15, 0.05, 0.24); }
+      sfxDeath() { this.tone("sawtooth", 150, 0.3, 0.08); this.noise(0.15, 0.25); }
+      sfxBossDeath() { this.tone("sawtooth", 100, 0.5, 0.1); this.tone("square", 80, 0.6, 0.08, 0.15); this.noise(0.2, 0.4); }
+      sfxVictory() { this.tone("square", 392, 0.15, 0.06); this.tone("square", 494, 0.15, 0.06, 0.15); this.tone("square", 587, 0.2, 0.06, 0.3); this.tone("square", 784, 0.3, 0.06, 0.5); }
+      sfxDefeat() { this.tone("square", 262, 0.2, 0.06); this.tone("square", 196, 0.25, 0.06, 0.2); this.tone("square", 147, 0.35, 0.06, 0.45); }
+      sfxEnemyHit() { this.tone("triangle", 220, 0.06, 0.04); }
 
-      function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
-      function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
-      function normalize(x, y) {
-        const l = Math.hypot(x, y);
-        return l < 0.0001 ? { x: 0, y: 0 } : { x: x / l, y: y / l };
-      }
-      function randInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+      generateFloor(floor) {
+        // Clear existing objects
+        if (this.floorLayer) this.floorLayer.destroy();
+        if (this.wallLayer) this.wallLayer.destroy();
+        if (this.decorLayer) this.decorLayer.destroy();
+        this.enemies.forEach(e => e.sprite?.destroy());
+        this.enemies = [];
+        this.pickups.forEach(p => p.sprite?.destroy());
+        this.pickups = [];
+        this.projectiles.forEach(p => p.sprite?.destroy());
+        this.projectiles = [];
+        this.torches.forEach(t => t.sprite?.destroy());
+        this.torches = [];
 
-      const input = { up: false, down: false, left: false, right: false, attack: false };
-      const CELL_WALL = 0, CELL_FLOOR = 1, CELL_STAIRS = 2;
-
-      const state = {
-        map: [],
-        player: null,
-        enemies: [],
-        pickups: [],
-        projectiles: [],
-        effects: [],
-        floor: 1,
-        kills: 0,
-        gold: 0,
-        camera: { x: 0, y: 0 },
-        paused: false,
-        gameOver: false,
-        victory: false,
-        status: "DESCEND...",
-        torches: [],
-        time: 0
-      };
-
-      function createPlayer(x, y) {
-        return { x, y, hp: PLAYER_HP, maxHp: PLAYER_HP, attackCd: 0, fireballCd: 0, healCd: 0, facing: { x: 0, y: 1 }, frame: 0 };
-      }
-
-      function createEnemy(x, y, isBoss = false) {
-        return { x, y, hp: isBoss ? BOSS_HP : ENEMY_HP, maxHp: isBoss ? BOSS_HP : ENEMY_HP, dmg: isBoss ? BOSS_DMG : ENEMY_DMG, speed: isBoss ? BOSS_SPEED : ENEMY_SPEED, attackCd: 0, isBoss, frame: 0 };
-      }
-
-      function createPickup(x, y, type, value) {
-        return { x, y, type, value };
-      }
-
-      function createProjectile(x, y, dx, dy, dmg, friendly) {
-        return { x, y, vx: dx, vy: dy, dmg, friendly, ttl: 2, frame: 0 };
-      }
-
-      function generateMap(floor) {
-        const map = [];
+        // Generate map data
+        this.map = [];
         for (let y = 0; y < MAP_H; y++) {
-          map[y] = [];
-          for (let x = 0; x < MAP_W; x++) map[y][x] = CELL_WALL;
+          this.map[y] = [];
+          for (let x = 0; x < MAP_W; x++) this.map[y][x] = this.CELL_WALL;
         }
-        const rooms = [];
-        const roomCount = 5 + floor;
-        for (let i = 0; i < roomCount; i++) {
-          const rw = randInt(4, 7), rh = randInt(4, 6);
-          const rx = randInt(1, MAP_W - rw - 2), ry = randInt(1, MAP_H - rh - 2);
+
+        // Generate rooms
+        this.rooms = [];
+        const roomCount = 6 + floor * 2;
+        for (let i = 0; i < roomCount * 3; i++) {
+          if (this.rooms.length >= roomCount) break;
+          const rw = Phaser.Math.Between(5, 8);
+          const rh = Phaser.Math.Between(4, 7);
+          const rx = Phaser.Math.Between(2, MAP_W - rw - 3);
+          const ry = Phaser.Math.Between(2, MAP_H - rh - 3);
           let overlap = false;
-          for (const r of rooms) {
-            if (rx < r.x + r.w + 1 && rx + rw + 1 > r.x && ry < r.y + r.h + 1 && ry + rh + 1 > r.y) { overlap = true; break; }
+          for (const r of this.rooms) {
+            if (rx < r.x + r.w + 2 && rx + rw + 2 > r.x && ry < r.y + r.h + 2 && ry + rh + 2 > r.y) {
+              overlap = true;
+              break;
+            }
           }
           if (overlap) continue;
-          rooms.push({ x: rx, y: ry, w: rw, h: rh });
-          for (let dy = 0; dy < rh; dy++) for (let dx = 0; dx < rw; dx++) map[ry + dy][rx + dx] = CELL_FLOOR;
+          this.rooms.push({ x: rx, y: ry, w: rw, h: rh });
+          for (let dy = 0; dy < rh; dy++) {
+            for (let dx = 0; dx < rw; dx++) {
+              this.map[ry + dy][rx + dx] = this.CELL_FLOOR;
+            }
+          }
         }
-        for (let i = 1; i < rooms.length; i++) {
-          const r1 = rooms[i - 1], r2 = rooms[i];
+
+        // Connect rooms with corridors
+        for (let i = 1; i < this.rooms.length; i++) {
+          const r1 = this.rooms[i - 1], r2 = this.rooms[i];
           let cx = Math.floor(r1.x + r1.w / 2), cy = Math.floor(r1.y + r1.h / 2);
           const tx = Math.floor(r2.x + r2.w / 2), ty = Math.floor(r2.y + r2.h / 2);
-          while (cx !== tx) { if (cx >= 0 && cx < MAP_W && cy >= 0 && cy < MAP_H) map[cy][cx] = CELL_FLOOR; cx += cx < tx ? 1 : -1; }
-          while (cy !== ty) { if (cx >= 0 && cx < MAP_W && cy >= 0 && cy < MAP_H) map[cy][cx] = CELL_FLOOR; cy += cy < ty ? 1 : -1; }
+          while (cx !== tx) {
+            if (cx >= 0 && cx < MAP_W && cy >= 0 && cy < MAP_H) {
+              this.map[cy][cx] = this.CELL_FLOOR;
+              if (cy > 0) this.map[cy - 1][cx] = this.CELL_FLOOR;
+            }
+            cx += cx < tx ? 1 : -1;
+          }
+          while (cy !== ty) {
+            if (cx >= 0 && cx < MAP_W && cy >= 0 && cy < MAP_H) {
+              this.map[cy][cx] = this.CELL_FLOOR;
+              if (cx > 0) this.map[cy][cx - 1] = this.CELL_FLOOR;
+            }
+            cy += cy < ty ? 1 : -1;
+          }
         }
-        if (rooms.length > 0) {
-          const lastRoom = rooms[rooms.length - 1];
-          map[Math.floor(lastRoom.y + lastRoom.h / 2)][Math.floor(lastRoom.x + lastRoom.w / 2)] = CELL_STAIRS;
-        }
-        const torches = [];
-        for (const r of rooms) {
-          if (Math.random() < 0.7) torches.push({ x: r.x * TILE + 8, y: r.y * TILE + 8 });
-          if (Math.random() < 0.5) torches.push({ x: (r.x + r.w - 1) * TILE + TILE - 8, y: r.y * TILE + 8 });
-        }
-        return { map, rooms, torches };
-      }
 
-      function spawnEnemies(rooms, floor, isBossFloor) {
-        const enemies = [];
-        const count = 3 + floor * 2;
-        for (let i = 0; i < count && rooms.length > 1; i++) {
-          const roomIdx = randInt(1, rooms.length - 1);
-          const room = rooms[roomIdx];
-          const ex = (room.x + randInt(1, room.w - 2)) * TILE + TILE / 2;
-          const ey = (room.y + randInt(1, room.h - 2)) * TILE + TILE / 2;
-          enemies.push(createEnemy(ex, ey, false));
+        // Place stairs in last room
+        if (this.rooms.length > 0) {
+          const lastRoom = this.rooms[this.rooms.length - 1];
+          const sx = Math.floor(lastRoom.x + lastRoom.w / 2);
+          const sy = Math.floor(lastRoom.y + lastRoom.h / 2);
+          this.map[sy][sx] = this.CELL_STAIRS;
+          this.stairsPos = { x: sx * TILE + TILE / 2, y: sy * TILE + TILE / 2 };
         }
-        if (isBossFloor && rooms.length > 0) {
-          const bossRoom = rooms[rooms.length - 1];
-          enemies.push(createEnemy((bossRoom.x + bossRoom.w / 2) * TILE, (bossRoom.y + bossRoom.h / 2 - 1) * TILE, true));
-        }
-        return enemies;
-      }
 
-      function spawnPickups(rooms) {
-        const pickups = [];
-        for (let i = 1; i < rooms.length; i++) {
-          const room = rooms[i];
+        // Create tile layers
+        this.floorLayer = this.add.group();
+        this.wallLayer = this.add.group();
+        this.decorLayer = this.add.group();
+
+        for (let y = 0; y < MAP_H; y++) {
+          for (let x = 0; x < MAP_W; x++) {
+            const px = x * TILE + TILE / 2;
+            const py = y * TILE + TILE / 2;
+            const cell = this.map[y][x];
+
+            if (cell === this.CELL_FLOOR) {
+              const floor = this.add.image(px, py, 'floor').setDepth(0);
+              this.floorLayer.add(floor);
+            } else if (cell === this.CELL_STAIRS) {
+              const stairs = this.add.image(px, py, 'stairs').setDepth(0);
+              this.floorLayer.add(stairs);
+            } else {
+              const below = y < MAP_H - 1 ? this.map[y + 1][x] : this.CELL_WALL;
+              const texKey = below !== this.CELL_WALL ? 'wallTop' : 'wall';
+              const wall = this.add.image(px, py, texKey).setDepth(1);
+              this.wallLayer.add(wall);
+            }
+          }
+        }
+
+        // Add torches in rooms
+        for (const r of this.rooms) {
+          if (Math.random() < 0.8) {
+            this.addTorch(r.x * TILE + 20, r.y * TILE + 20);
+          }
           if (Math.random() < 0.6) {
-            const px = (room.x + randInt(1, room.w - 2)) * TILE + TILE / 2;
-            const py = (room.y + randInt(1, room.h - 2)) * TILE + TILE / 2;
-            pickups.push(createPickup(px, py, Math.random() < 0.3 ? "hp" : "gold", Math.random() < 0.3 ? randInt(15, 30) : randInt(10, 25)));
+            this.addTorch((r.x + r.w - 1) * TILE + TILE - 20, r.y * TILE + 20);
+          }
+          if (Math.random() < 0.4 && r.h > 4) {
+            this.addTorch(r.x * TILE + 20, (r.y + r.h - 1) * TILE + TILE - 20);
           }
         }
-        return pickups;
+
+        // Spawn enemies
+        this.spawnEnemies(floor, floor >= MAX_FLOOR);
+
+        // Spawn pickups
+        this.spawnPickups();
+
+        // Update state
+        gameState.floor = floor;
+        gameState.status = floor >= MAX_FLOOR ? "DEMON LORD AWAITS" : "FIND THE STAIRS";
+        this.updateHUD();
+        this.updateMinimap();
       }
 
-      function initFloor(floor) {
-        const isBossFloor = floor >= MAX_FLOOR;
-        const { map, rooms, torches } = generateMap(floor);
-        state.map = map;
-        state.torches = torches;
-        if (rooms.length > 0) {
-          const startRoom = rooms[0];
-          const px = (startRoom.x + startRoom.w / 2) * TILE, py = (startRoom.y + startRoom.h / 2) * TILE;
-          if (state.player) { state.player.x = px; state.player.y = py; }
-          else state.player = createPlayer(px, py);
+      addTorch(x, y) {
+        const sprite = this.add.image(x, y, 'torch').setDepth(3);
+        const light = this.add.pointlight(x, y - 12, 0xff8844, 120, 0.6);
+        light.attenuation = 0.05;
+
+        this.tweens.add({
+          targets: light,
+          intensity: { from: 0.5, to: 0.8 },
+          radius: { from: 100, to: 140 },
+          duration: 300 + Math.random() * 200,
+          yoyo: true,
+          repeat: -1,
+          ease: 'Sine.easeInOut'
+        });
+
+        this.torches.push({ sprite, light, x, y });
+      }
+
+      spawnEnemies(floor, isBossFloor) {
+        const count = 4 + floor * 3;
+        for (let i = 0; i < count && this.rooms.length > 1; i++) {
+          const roomIdx = Phaser.Math.Between(1, this.rooms.length - 1);
+          const room = this.rooms[roomIdx];
+          const ex = (room.x + Phaser.Math.Between(1, room.w - 2)) * TILE + TILE / 2;
+          const ey = (room.y + Phaser.Math.Between(1, room.h - 2)) * TILE + TILE / 2;
+          this.createEnemy(ex, ey, false);
         }
-        state.enemies = spawnEnemies(rooms, floor, isBossFloor);
-        state.pickups = spawnPickups(rooms);
-        state.projectiles = [];
-        state.effects = [];
-        state.floor = floor;
-        state.status = isBossFloor ? "DEMON LORD AWAITS" : "FIND THE STAIRS";
-      }
 
-      function resetGame() {
-        state.kills = 0; state.gold = 0; state.paused = false;
-        state.gameOver = false; state.victory = false; state.player = null;
-        state.time = 0;
-        initFloor(1);
-      }
-
-      function tileAt(px, py) {
-        const tx = Math.floor(px / TILE), ty = Math.floor(py / TILE);
-        if (tx < 0 || tx >= MAP_W || ty < 0 || ty >= MAP_H) return CELL_WALL;
-        return state.map[ty][tx];
-      }
-
-      function canMove(x, y, radius = 14) {
-        const checks = [{ x: x - radius, y: y - radius }, { x: x + radius, y: y - radius }, { x: x - radius, y: y + radius }, { x: x + radius, y: y + radius }];
-        for (const c of checks) if (tileAt(c.x, c.y) === CELL_WALL) return false;
-        return true;
-      }
-
-      function applyDamageToPlayer(dmg) {
-        state.player.hp -= dmg;
-        sfxHit();
-        state.effects.push({ type: "blood", x: state.player.x, y: state.player.y, life: 500 });
-        state.effects.push({ type: "dmgText", x: state.player.x, y: state.player.y - 20, text: `-${dmg}`, life: 600, color: "#c41e1e" });
-        if (state.player.hp <= 0) { state.player.hp = 0; state.gameOver = true; state.status = "YOU HAVE DIED"; sfxDefeat(); }
-      }
-
-      function applyDamageToEnemy(enemy, dmg) {
-        enemy.hp -= dmg;
-        sfxEnemyHit();
-        state.effects.push({ type: "blood", x: enemy.x, y: enemy.y, life: 400 });
-        state.effects.push({ type: "dmgText", x: enemy.x, y: enemy.y - 20, text: `-${dmg}`, life: 500, color: "#ff6644" });
-        if (enemy.hp <= 0) {
-          enemy.hp = 0; state.kills++;
-          const goldDrop = enemy.isBoss ? randInt(50, 100) : randInt(5, 15);
-          state.gold += goldDrop;
-          state.effects.push({ type: "goldText", x: enemy.x, y: enemy.y - 10, text: `+${goldDrop}`, life: 700 });
-          state.effects.push({ type: "death", x: enemy.x, y: enemy.y, life: 600, isBoss: enemy.isBoss });
-          if (enemy.isBoss) { sfxBossDeath(); state.victory = true; state.gameOver = true; state.status = "VICTORY"; sfxVictory(); }
-          else sfxDeath();
-          return true;
+        if (isBossFloor && this.rooms.length > 0) {
+          const bossRoom = this.rooms[this.rooms.length - 1];
+          const bx = (bossRoom.x + bossRoom.w / 2) * TILE;
+          const by = (bossRoom.y + bossRoom.h / 2 - 1) * TILE;
+          this.createEnemy(bx, by, true);
         }
-        return false;
       }
 
-      function useFireball() {
-        if (state.player.fireballCd > 0) return false;
-        state.player.fireballCd = FIREBALL_CD;
-        const dir = state.player.facing;
-        state.projectiles.push(createProjectile(state.player.x, state.player.y, dir.x * FIREBALL_SPEED, dir.y * FIREBALL_SPEED, FIREBALL_DMG, true));
-        sfxFireball();
-        return true;
-      }
+      createEnemy(x, y, isBoss) {
+        const texKey = isBoss ? 'boss_0' : 'demon_0';
+        const sprite = this.add.sprite(x, y, texKey).setDepth(10);
+        if (isBoss) sprite.setScale(1.2);
 
-      function useHeal() {
-        if (state.player.healCd > 0 || state.player.hp >= state.player.maxHp) return false;
-        state.player.healCd = HEAL_CD;
-        const healAmt = Math.min(HEAL_AMOUNT, state.player.maxHp - state.player.hp);
-        state.player.hp += healAmt;
-        sfxHeal();
-        state.effects.push({ type: "heal", x: state.player.x, y: state.player.y, life: 600 });
-        state.effects.push({ type: "dmgText", x: state.player.x, y: state.player.y - 20, text: `+${healAmt}`, life: 600, color: "#44cc44" });
-        return true;
-      }
+        const enemy = {
+          sprite,
+          x, y,
+          hp: isBoss ? BOSS_HP : ENEMY_HP,
+          maxHp: isBoss ? BOSS_HP : ENEMY_HP,
+          dmg: isBoss ? BOSS_DMG : ENEMY_DMG,
+          speed: isBoss ? BOSS_SPEED : ENEMY_SPEED,
+          attackCd: 0,
+          isBoss,
+          frame: 0,
+          animTime: 0
+        };
 
-      function updatePlayer(dt) {
-        const p = state.player;
-        p.attackCd = Math.max(0, p.attackCd - dt);
-        p.fireballCd = Math.max(0, p.fireballCd - dt);
-        p.healCd = Math.max(0, p.healCd - dt);
-        let dx = (input.right ? 1 : 0) - (input.left ? 1 : 0);
-        let dy = (input.down ? 1 : 0) - (input.up ? 1 : 0);
-        if (dx !== 0 || dy !== 0) {
-          const d = normalize(dx, dy);
-          p.facing = { x: d.x, y: d.y };
-          const nx = p.x + d.x * PLAYER_SPEED * dt, ny = p.y + d.y * PLAYER_SPEED * dt;
-          if (canMove(nx, p.y)) p.x = nx;
-          if (canMove(p.x, ny)) p.y = ny;
-          p.frame += dt * 8;
+        // Health bar
+        enemy.hpBarBg = this.add.rectangle(x, y - (isBoss ? 50 : 30), isBoss ? 60 : 32, 6, 0x1a0a0a).setDepth(15);
+        enemy.hpBarFill = this.add.rectangle(x, y - (isBoss ? 50 : 30), isBoss ? 60 : 32, 6, 0xcc3333).setDepth(16);
+        enemy.hpBarFill.setOrigin(0, 0.5);
+        enemy.hpBarFill.x = x - (isBoss ? 30 : 16);
+
+        if (isBoss) {
+          enemy.nameText = this.add.text(x, y - 65, 'DEMON LORD', {
+            fontSize: '10px',
+            fontFamily: 'Press Start 2P',
+            color: '#c41e1e'
+          }).setOrigin(0.5).setDepth(16);
         }
-        if (input.attack && p.attackCd <= 0) {
-          p.attackCd = PLAYER_ATK_CD;
-          sfxSwing();
-          state.effects.push({ type: "slash", x: p.x + p.facing.x * 28, y: p.y + p.facing.y * 28, angle: Math.atan2(p.facing.y, p.facing.x), life: 150 });
-          for (const e of state.enemies) {
-            if (e.hp <= 0) continue;
-            if (dist(p, e) <= PLAYER_ATK_RANGE) applyDamageToEnemy(e, PLAYER_ATK);
+
+        this.enemies.push(enemy);
+      }
+
+      spawnPickups() {
+        for (let i = 1; i < this.rooms.length; i++) {
+          const room = this.rooms[i];
+          if (Math.random() < 0.65) {
+            const px = (room.x + Phaser.Math.Between(1, room.w - 2)) * TILE + TILE / 2;
+            const py = (room.y + Phaser.Math.Between(1, room.h - 2)) * TILE + TILE / 2;
+            const isPotion = Math.random() < 0.35;
+            const value = isPotion ? Phaser.Math.Between(20, 35) : Phaser.Math.Between(10, 30);
+            this.createPickup(px, py, isPotion ? 'hp' : 'gold', value);
           }
         }
-        const tile = tileAt(p.x, p.y);
-        if (tile === CELL_STAIRS) {
-          const bossAlive = state.enemies.some(e => e.isBoss && e.hp > 0);
-          if (state.floor >= MAX_FLOOR && bossAlive) state.status = "DEFEAT THE BOSS";
-          else if (state.floor < MAX_FLOOR) { sfxStairs(); state.floor++; initFloor(state.floor); }
+      }
+
+      createPickup(x, y, type, value) {
+        const texKey = type === 'hp' ? 'potion' : 'gold';
+        const sprite = this.add.image(x, y, texKey).setDepth(5);
+        
+        this.tweens.add({
+          targets: sprite,
+          y: y - 4,
+          duration: 800,
+          yoyo: true,
+          repeat: -1,
+          ease: 'Sine.easeInOut'
+        });
+
+        this.pickups.push({ sprite, x, y, type, value });
+      }
+
+      setupPlayer() {
+        if (this.rooms.length === 0) return;
+
+        const startRoom = this.rooms[0];
+        const px = (startRoom.x + startRoom.w / 2) * TILE;
+        const py = (startRoom.y + startRoom.h / 2) * TILE;
+
+        if (this.player) {
+          this.player.sprite.setPosition(px, py);
+          this.player.x = px;
+          this.player.y = py;
+        } else {
+          const sprite = this.add.sprite(px, py, 'player_0').setDepth(10);
+
+          this.player = {
+            sprite,
+            x: px,
+            y: py,
+            hp: PLAYER_HP,
+            maxHp: PLAYER_HP,
+            attackCd: 0,
+            fireballCd: 0,
+            healCd: 0,
+            facing: { x: 0, y: 1 },
+            frame: 0,
+            animTime: 0,
+            isMoving: false,
+            isAttacking: false
+          };
+
+          // Player light
+          this.playerLight = this.add.pointlight(px, py, 0xffcc88, 180, 0.7);
+          this.playerLight.attenuation = 0.04;
+        }
+
+        this.updateHUD();
+      }
+
+      setupInputs() {
+        this.cursors = this.input.keyboard.createCursorKeys();
+        this.keys = {
+          w: this.input.keyboard.addKey('W'),
+          a: this.input.keyboard.addKey('A'),
+          s: this.input.keyboard.addKey('S'),
+          d: this.input.keyboard.addKey('D'),
+          space: this.input.keyboard.addKey('SPACE'),
+          q: this.input.keyboard.addKey('Q'),
+          e: this.input.keyboard.addKey('E'),
+          p: this.input.keyboard.addKey('P'),
+          r: this.input.keyboard.addKey('R')
+        };
+
+        this.input.on('pointerdown', () => this.ensureAudio());
+        this.input.keyboard.on('keydown', () => this.ensureAudio());
+
+        // Direct DOM listener for pause/restart (works during game over/pause)
+        const scene = this;
+        window.addEventListener('keydown', (e) => {
+          if (e.code === 'KeyR') {
+            scene.restartGame();
+          } else if (e.code === 'KeyP' && !gameState.gameOver) {
+            gameState.paused = !gameState.paused;
+            if (gameState.paused) {
+              scene.showOverlay();
+            } else {
+              scene.hideOverlay();
+            }
+          }
+        });
+      }
+
+      setupLighting() {
+        // Dark overlay for Diablo-style darkness
+        this.darkOverlay = this.add.graphics();
+        this.darkOverlay.setDepth(50);
+        this.updateDarkness();
+      }
+
+      updateDarkness() {
+        if (!this.darkOverlay || !this.player) return;
+
+        this.darkOverlay.clear();
+
+        // Create darkness gradient
+        const w = this.cameras.main.width;
+        const h = this.cameras.main.height;
+        const camX = this.cameras.main.scrollX;
+        const camY = this.cameras.main.scrollY;
+
+        // Vignette effect
+        this.darkOverlay.fillStyle(0x000000, 0);
+        this.darkOverlay.fillRect(camX, camY, w, h);
+
+        // Add edge darkness
+        const edgeGrad = this.darkOverlay;
+        edgeGrad.fillStyle(0x000000, 0.7);
+        edgeGrad.fillRect(camX, camY, w, 30);
+        edgeGrad.fillRect(camX, camY + h - 30, w, 30);
+        edgeGrad.fillRect(camX, camY, 30, h);
+        edgeGrad.fillRect(camX + w - 30, camY, 30, h);
+      }
+
+      setupParticles() {
+        // Fire particles for fireballs
+        this.fireEmitter = this.add.particles(0, 0, 'particle', {
+          speed: { min: 20, max: 60 },
+          scale: { start: 0.8, end: 0 },
+          lifespan: 300,
+          tint: [0xff6622, 0xffaa33, 0xffdd66],
+          blendMode: 'ADD',
+          emitting: false
+        });
+        this.fireEmitter.setDepth(12);
+
+        // Blood particles
+        this.bloodEmitter = this.add.particles(0, 0, 'blood_particle', {
+          speed: { min: 50, max: 150 },
+          angle: { min: 0, max: 360 },
+          scale: { start: 1, end: 0.3 },
+          lifespan: 600,
+          gravityY: 200,
+          emitting: false
+        });
+        this.bloodEmitter.setDepth(8);
+
+        // Heal particles
+        this.healEmitter = this.add.particles(0, 0, 'particle', {
+          speed: { min: 30, max: 80 },
+          angle: { min: 250, max: 290 },
+          scale: { start: 0.6, end: 0 },
+          lifespan: 800,
+          tint: 0x44ff44,
+          blendMode: 'ADD',
+          emitting: false
+        });
+        this.healEmitter.setDepth(12);
+      }
+
+      setupCamera() {
+        this.cameras.main.setBounds(0, 0, MAP_W * TILE, MAP_H * TILE);
+        if (this.player) {
+          this.cameras.main.startFollow(this.player.sprite, true, 0.08, 0.08);
+        }
+        this.cameras.main.setBackgroundColor(PAL.black);
+      }
+
+      update(time, delta) {
+        if (gameState.paused || gameState.gameOver) {
+          this.handlePauseInput();
+          return;
+        }
+
+        this.updatePlayer(delta);
+        this.updateEnemies(delta);
+        this.updateProjectiles(delta);
+        this.updatePickups();
+        this.updateDarkness();
+        this.updateMinimap();
+      }
+
+      handlePauseInput() {
+        if (Phaser.Input.Keyboard.JustDown(this.keys.p) && !gameState.gameOver) {
+          gameState.paused = !gameState.paused;
+          this.showOverlay();
+        }
+        if (Phaser.Input.Keyboard.JustDown(this.keys.r)) {
+          this.restartGame();
         }
       }
 
-      function updateEnemies(dt) {
-        for (const e of state.enemies) {
+      updatePlayer(delta) {
+        const p = this.player;
+        if (!p) return;
+
+        // Cooldowns
+        p.attackCd = Math.max(0, p.attackCd - delta);
+        p.fireballCd = Math.max(0, p.fireballCd - delta);
+        p.healCd = Math.max(0, p.healCd - delta);
+
+        // Movement
+        let dx = 0, dy = 0;
+        if (this.keys.a.isDown || this.cursors.left.isDown) dx -= 1;
+        if (this.keys.d.isDown || this.cursors.right.isDown) dx += 1;
+        if (this.keys.w.isDown || this.cursors.up.isDown) dy -= 1;
+        if (this.keys.s.isDown || this.cursors.down.isDown) dy += 1;
+
+        p.isMoving = dx !== 0 || dy !== 0;
+
+        if (p.isMoving) {
+          const len = Math.sqrt(dx * dx + dy * dy);
+          dx /= len;
+          dy /= len;
+          p.facing = { x: dx, y: dy };
+
+          const nx = p.x + dx * PLAYER_SPEED * (delta / 1000);
+          const ny = p.y + dy * PLAYER_SPEED * (delta / 1000);
+
+          if (this.canMove(nx, p.y)) p.x = nx;
+          if (this.canMove(p.x, ny)) p.y = ny;
+
+          p.animTime += delta;
+          p.frame = Math.floor(p.animTime / 150) % 3;
+        } else {
+          p.frame = 0;
+        }
+
+        // Update sprite
+        const texKey = p.isAttacking ? 'player_3' : 'player_' + p.frame;
+        p.sprite.setTexture(texKey);
+        p.sprite.setPosition(p.x, p.y);
+        p.sprite.setFlipX(p.facing.x < 0);
+
+        // Update player light
+        this.playerLight.setPosition(p.x, p.y - 10);
+
+        // Melee attack
+        if (this.keys.space.isDown && p.attackCd <= 0) {
+          this.playerMeleeAttack();
+        }
+
+        // Fireball
+        if (Phaser.Input.Keyboard.JustDown(this.keys.q)) {
+          this.useFireball();
+        }
+
+        // Heal
+        if (Phaser.Input.Keyboard.JustDown(this.keys.e)) {
+          this.useHeal();
+        }
+
+        // Pause
+        if (Phaser.Input.Keyboard.JustDown(this.keys.p)) {
+          gameState.paused = true;
+          this.showOverlay();
+        }
+
+        // Restart
+        if (Phaser.Input.Keyboard.JustDown(this.keys.r)) {
+          this.restartGame();
+        }
+
+        // Check stairs
+        this.checkStairs();
+
+        // Update HUD
+        this.updateHUD();
+      }
+
+      playerMeleeAttack() {
+        const p = this.player;
+        p.attackCd = PLAYER_ATK_CD;
+        p.isAttacking = true;
+        this.sfxSwing();
+
+        // Slash effect
+        const slashX = p.x + p.facing.x * 35;
+        const slashY = p.y + p.facing.y * 35;
+        const slash = this.add.arc(slashX, slashY, 30, 
+          Phaser.Math.RadToDeg(Math.atan2(p.facing.y, p.facing.x)) - 45,
+          Phaser.Math.RadToDeg(Math.atan2(p.facing.y, p.facing.x)) + 45,
+          false, 0xffffff, 0.8
+        ).setDepth(15);
+        slash.setStrokeStyle(4, 0xa0a0a0, 1);
+        slash.isFilled = false;
+
+        this.tweens.add({
+          targets: slash,
+          alpha: 0,
+          scale: 1.5,
+          duration: 150,
+          onComplete: () => slash.destroy()
+        });
+
+        // Hit enemies
+        for (const e of this.enemies) {
           if (e.hp <= 0) continue;
-          e.attackCd = Math.max(0, e.attackCd - dt);
-          e.frame += dt * 4;
-          const d = dist(e, state.player);
-          if (d > ENEMY_ATK_RANGE) {
-            const dir = normalize(state.player.x - e.x, state.player.y - e.y);
-            const nx = e.x + dir.x * e.speed * dt, ny = e.y + dir.y * e.speed * dt;
-            if (canMove(nx, e.y, e.isBoss ? 20 : 14)) e.x = nx;
-            if (canMove(e.x, ny, e.isBoss ? 20 : 14)) e.y = ny;
-          } else if (e.attackCd <= 0) { e.attackCd = ENEMY_ATK_CD; applyDamageToPlayer(e.dmg); }
-        }
-        state.enemies = state.enemies.filter(e => e.hp > 0);
-      }
-
-      function updatePickups() {
-        const p = state.player;
-        for (let i = state.pickups.length - 1; i >= 0; i--) {
-          const pk = state.pickups[i];
-          if (dist(p, pk) < 28) {
-            if (pk.type === "gold") { state.gold += pk.value; state.effects.push({ type: "goldText", x: pk.x, y: pk.y - 10, text: `+${pk.value}`, life: 500 }); }
-            else { const heal = Math.min(pk.value, p.maxHp - p.hp); p.hp += heal; state.effects.push({ type: "dmgText", x: pk.x, y: pk.y - 10, text: `+${heal}`, life: 500, color: "#44cc44" }); }
-            sfxPickup();
-            state.pickups.splice(i, 1);
+          const dist = Phaser.Math.Distance.Between(p.x, p.y, e.x, e.y);
+          if (dist <= PLAYER_ATK_RANGE) {
+            this.damageEnemy(e, PLAYER_ATK);
           }
         }
+
+        // Reset attack animation
+        this.time.delayedCall(200, () => {
+          p.isAttacking = false;
+        });
       }
 
-      function updateProjectiles(dt) {
-        for (const proj of state.projectiles) {
-          proj.x += proj.vx * dt; proj.y += proj.vy * dt; proj.ttl -= dt; proj.frame += dt * 12;
-          if (tileAt(proj.x, proj.y) === CELL_WALL) { proj.ttl = 0; state.effects.push({ type: "fireHit", x: proj.x, y: proj.y, life: 300 }); continue; }
-          if (proj.friendly) {
-            for (const e of state.enemies) {
-              if (e.hp <= 0) continue;
-              if (dist(proj, e) < (e.isBoss ? 32 : 20)) { applyDamageToEnemy(e, proj.dmg); proj.ttl = 0; state.effects.push({ type: "fireHit", x: proj.x, y: proj.y, life: 300 }); break; }
-            }
-          } else if (dist(proj, state.player) < 18) { applyDamageToPlayer(proj.dmg); proj.ttl = 0; }
-        }
-        state.projectiles = state.projectiles.filter(p => p.ttl > 0);
+      useFireball() {
+        const p = this.player;
+        if (p.fireballCd > 0) return;
+
+        p.fireballCd = FIREBALL_CD;
+        this.sfxFireball();
+
+        const sprite = this.add.sprite(p.x, p.y, 'fireball_0').setDepth(11);
+        const proj = {
+          sprite,
+          x: p.x,
+          y: p.y,
+          vx: p.facing.x * FIREBALL_SPEED,
+          vy: p.facing.y * FIREBALL_SPEED,
+          dmg: FIREBALL_DMG,
+          ttl: 2000,
+          frame: 0,
+          animTime: 0
+        };
+
+        // Fireball light
+        proj.light = this.add.pointlight(p.x, p.y, 0xff6622, 80, 0.8);
+
+        this.projectiles.push(proj);
       }
 
-      function updateEffects(dt) {
-        for (const e of state.effects) e.life -= dt * 1000;
-        state.effects = state.effects.filter(e => e.life > 0);
+      useHeal() {
+        const p = this.player;
+        if (p.healCd > 0 || p.hp >= p.maxHp) return;
+
+        p.healCd = HEAL_CD;
+        const healAmt = Math.min(HEAL_AMOUNT, p.maxHp - p.hp);
+        p.hp += healAmt;
+        this.sfxHeal();
+
+        // Heal particles
+        this.healEmitter.setPosition(p.x, p.y);
+        this.healEmitter.explode(20);
+
+        // Heal ring effect
+        const ring = this.add.circle(p.x, p.y, 10, 0x44ff44, 0).setDepth(15);
+        ring.setStrokeStyle(3, 0x44ff44, 0.8);
+        this.tweens.add({
+          targets: ring,
+          radius: 60,
+          alpha: 0,
+          duration: 600,
+          onComplete: () => ring.destroy()
+        });
+
+        this.showDamageText(p.x, p.y - 30, '+' + healAmt, 0x44ff44);
       }
 
-      function update(dt) {
-        state.time += dt;
-        if (state.paused || state.gameOver) { updateEffects(dt); return; }
-        updatePlayer(dt); updateEnemies(dt); updatePickups(); updateProjectiles(dt); updateEffects(dt);
-        const p = state.player;
-        state.camera.x += (p.x - canvas.width / 2 - state.camera.x) * 0.1;
-        state.camera.y += (p.y - canvas.height / 2 - state.camera.y) * 0.1;
-        state.camera.x = clamp(state.camera.x, 0, MAP_W * TILE - canvas.width);
-        state.camera.y = clamp(state.camera.y, 0, MAP_H * TILE - canvas.height);
-      }
+      damageEnemy(enemy, dmg) {
+        enemy.hp -= dmg;
+        this.sfxEnemyHit();
 
-      function px(x, y, w, h, color) { ctx.fillStyle = color; ctx.fillRect(Math.floor(x), Math.floor(y), w, h); }
+        // Blood particles
+        this.bloodEmitter.setPosition(enemy.x, enemy.y);
+        this.bloodEmitter.explode(8);
 
-      function drawFloorTile(sx, sy) {
-        px(sx, sy, TILE, TILE, PAL.floor1);
-        for (let i = 0; i < 4; i++) {
-          const ox = ((sx * 7 + sy * 13 + i * 17) % 32), oy = ((sx * 11 + sy * 5 + i * 23) % 28);
-          px(sx + ox, sy + oy, 4, 4, PAL.floor2);
-        }
-        px(sx + ((sx + sy) % 18) + 6, sy + ((sx * 3 + sy * 2) % 20) + 4, 2, 2, PAL.floor3);
-      }
+        // Damage text
+        this.showDamageText(enemy.x, enemy.y - 30, '-' + dmg, 0xff6644);
 
-      function drawWallTile(sx, sy, hasFloorBelow) {
-        px(sx, sy, TILE, TILE, PAL.wall1);
-        px(sx + 2, sy + 2, TILE - 4, 6, PAL.wall2);
-        px(sx + 4, sy + 4, TILE - 8, 2, PAL.wall3);
-        if (hasFloorBelow) {
-          px(sx, sy + TILE - 10, TILE, 10, PAL.wallTop);
-          px(sx + 2, sy + TILE - 8, TILE - 4, 2, PAL.wall3);
-        }
-        px(sx + ((sx + sy) % 12) + 8, sy + ((sx * 2 + sy) % 16) + 12, 3, 3, PAL.wall3);
-      }
+        // Update health bar
+        const ratio = Math.max(0, enemy.hp / enemy.maxHp);
+        const width = enemy.isBoss ? 60 : 32;
+        enemy.hpBarFill.width = width * ratio;
 
-      function drawStairsTile(sx, sy) {
-        drawFloorTile(sx, sy);
-        const cx = sx + TILE / 2, cy = sy + TILE / 2;
-        px(cx - 14, cy - 10, 28, 20, PAL.wall3);
-        px(cx - 12, cy - 8, 24, 4, PAL.stairs);
-        px(cx - 10, cy - 2, 20, 4, PAL.stairs);
-        px(cx - 8, cy + 4, 16, 4, PAL.stairs);
-        px(cx - 12, cy + 10, 2, 4, PAL.wall1);
-        px(cx + 10, cy + 10, 2, 4, PAL.wall1);
-      }
+        // Flash red
+        enemy.sprite.setTint(0xff0000);
+        this.time.delayedCall(100, () => enemy.sprite.clearTint());
 
-      function drawMap() {
-        const startX = Math.floor(state.camera.x / TILE) - 1, startY = Math.floor(state.camera.y / TILE) - 1;
-        const endX = Math.min(MAP_W, startX + Math.ceil(canvas.width / TILE) + 3);
-        const endY = Math.min(MAP_H, startY + Math.ceil(canvas.height / TILE) + 3);
-        for (let y = Math.max(0, startY); y < endY; y++) {
-          for (let x = Math.max(0, startX); x < endX; x++) {
-            const cell = state.map[y]?.[x];
-            const sx = x * TILE - state.camera.x, sy = y * TILE - state.camera.y;
-            if (cell === CELL_FLOOR) drawFloorTile(sx, sy);
-            else if (cell === CELL_STAIRS) drawStairsTile(sx, sy);
-            else if (cell === CELL_WALL) {
-              const below = y < MAP_H - 1 ? state.map[y + 1]?.[x] : CELL_WALL;
-              drawWallTile(sx, sy, below !== CELL_WALL);
-            }
-          }
-        }
-      }
-
-      function drawPlayer() {
-        const p = state.player;
-        const sx = Math.floor(p.x - state.camera.x), sy = Math.floor(p.y - state.camera.y);
-        const bob = Math.floor(Math.sin(p.frame) * 2);
-        px(sx - 5, sy - 16 + bob, 10, 10, PAL.player1);
-        px(sx - 4, sy - 15 + bob, 8, 8, PAL.player2);
-        px(sx - 3, sy - 14 + bob, 2, 2, "#1a1a1a");
-        px(sx + 1, sy - 14 + bob, 2, 2, "#1a1a1a");
-        px(sx - 6, sy - 6 + bob, 12, 14, PAL.playerArmor);
-        px(sx - 5, sy - 5 + bob, 10, 12, PAL.player3);
-        px(sx - 8, sy - 4 + bob, 4, 8, PAL.player1);
-        px(sx + 4, sy - 4 + bob, 4, 8, PAL.player1);
-        px(sx - 4, sy + 8, 3, 8, PAL.player2);
-        px(sx + 1, sy + 8, 3, 8, PAL.player2);
-        const wx = sx + Math.floor(p.facing.x * 14), wy = sy + Math.floor(p.facing.y * 14) - 4;
-        px(wx - 1, wy - 8, 2, 16, PAL.playerSword);
-        px(wx - 2, wy - 10, 4, 3, PAL.playerSword);
-        drawHealthBar(sx, sy - 26, 24, 4, p.hp, p.maxHp, "#44aa44", "#1a3a1a");
-      }
-
-      function drawEnemy(e) {
-        const sx = Math.floor(e.x - state.camera.x), sy = Math.floor(e.y - state.camera.y);
-        const bob = Math.floor(Math.sin(e.frame) * 2);
-        const size = e.isBoss ? 1.8 : 1;
-        const s = (v) => Math.floor(v * size);
-        if (e.isBoss) {
-          px(sx - s(8), sy - s(28) + bob, s(4), s(12), PAL.bossHorn);
-          px(sx + s(4), sy - s(28) + bob, s(4), s(12), PAL.bossHorn);
-        }
-        px(sx - s(8), sy - s(18) + bob, s(16), s(14), PAL.demon1);
-        px(sx - s(6), sy - s(16) + bob, s(12), s(10), PAL.demon2);
-        px(sx - s(5), sy - s(14) + bob, 3, 3, PAL.demonEye);
-        px(sx + s(2), sy - s(14) + bob, 3, 3, PAL.demonEye);
-        px(sx - s(3), sy - s(8) + bob, s(6), 3, PAL.demon3);
-        px(sx - s(10), sy - s(8) + bob, s(20), s(16), PAL.demon1);
-        px(sx - s(8), sy - s(6) + bob, s(16), s(12), PAL.demon2);
-        px(sx - s(12), sy - s(4) + bob, s(6), s(8), PAL.demon1);
-        px(sx + s(6), sy - s(4) + bob, s(6), s(8), PAL.demon1);
-        px(sx - s(6), sy + s(8), s(4), s(6), PAL.demon2);
-        px(sx + s(2), sy + s(8), s(4), s(6), PAL.demon2);
-        const barW = e.isBoss ? 48 : 24;
-        drawHealthBar(sx, sy - s(32), barW, 4, e.hp, e.maxHp, "#cc3333", "#3a1a1a");
-        if (e.isBoss) {
-          ctx.fillStyle = "#c41e1e";
-          ctx.font = "8px 'Press Start 2P', monospace";
-          ctx.textAlign = "center";
-          ctx.fillText("DEMON LORD", sx, sy - s(38));
+        if (enemy.hp <= 0) {
+          this.killEnemy(enemy);
         }
       }
 
-      function drawPickup(pk) {
-        const sx = Math.floor(pk.x - state.camera.x), sy = Math.floor(pk.y - state.camera.y);
-        const bob = Math.floor(Math.sin(state.time * 4) * 2);
-        if (pk.type === "gold") {
-          px(sx - 6, sy - 4 + bob, 12, 8, PAL.gold2);
-          px(sx - 4, sy - 6 + bob, 8, 2, PAL.gold1);
-          px(sx - 5, sy - 3 + bob, 10, 6, PAL.gold1);
-          px(sx - 3, sy - 2 + bob, 2, 2, PAL.gold3);
-          px(sx + 2, sy + bob, 3, 3, PAL.gold3);
+      killEnemy(enemy) {
+        gameState.kills++;
+        const goldDrop = enemy.isBoss ? Phaser.Math.Between(60, 120) : Phaser.Math.Between(8, 20);
+        gameState.gold += goldDrop;
+
+        // Death effect
+        this.bloodEmitter.setPosition(enemy.x, enemy.y);
+        this.bloodEmitter.explode(20);
+
+        // Gold text
+        this.showDamageText(enemy.x, enemy.y - 10, '+' + goldDrop, 0xc9a227);
+
+        if (enemy.isBoss) {
+          this.sfxBossDeath();
+          gameState.victory = true;
+          gameState.gameOver = true;
+          gameState.status = "VICTORY";
+          this.sfxVictory();
+          this.showOverlay();
         } else {
-          px(sx - 4, sy - 10 + bob, 8, 12, PAL.potionGlass);
-          px(sx - 3, sy - 8 + bob, 6, 8, PAL.potion);
-          px(sx - 2, sy - 6 + bob, 2, 4, "#ff6666");
-          px(sx - 3, sy - 11 + bob, 6, 2, PAL.gold2);
+          this.sfxDeath();
         }
+
+        // Cleanup
+        enemy.sprite.destroy();
+        enemy.hpBarBg.destroy();
+        enemy.hpBarFill.destroy();
+        if (enemy.nameText) enemy.nameText.destroy();
+        enemy.hp = 0;
+
+        this.updateHUD();
       }
 
-      function drawProjectile(proj) {
-        const sx = Math.floor(proj.x - state.camera.x), sy = Math.floor(proj.y - state.camera.y);
-        const flicker = Math.floor(proj.frame) % 3;
-        px(sx - 6, sy - 6, 12, 12, flicker === 0 ? PAL.fire1 : (flicker === 1 ? PAL.fire2 : PAL.fire3));
-        px(sx - 4, sy - 4, 8, 8, flicker === 1 ? PAL.fire1 : PAL.fire2);
-        px(sx - 2, sy - 2, 4, 4, PAL.fire3);
+      damagePlayer(dmg) {
+        const p = this.player;
+        p.hp -= dmg;
+        this.sfxHit();
+
+        // Blood particles
+        this.bloodEmitter.setPosition(p.x, p.y);
+        this.bloodEmitter.explode(10);
+
+        // Damage text
+        this.showDamageText(p.x, p.y - 30, '-' + dmg, 0xc41e1e);
+
+        // Flash screen red
+        this.cameras.main.flash(100, 100, 20, 20);
+
+        if (p.hp <= 0) {
+          p.hp = 0;
+          gameState.gameOver = true;
+          gameState.status = "YOU HAVE DIED";
+          this.sfxDefeat();
+          this.showOverlay();
+        }
+
+        this.updateHUD();
       }
 
-      function drawEffects() {
-        for (const e of state.effects) {
-          const sx = Math.floor(e.x - state.camera.x), sy = Math.floor(e.y - state.camera.y);
-          const alpha = Math.min(1, e.life / 300);
-          ctx.globalAlpha = alpha;
-          if (e.type === "blood") {
-            for (let i = 0; i < 5; i++) {
-              const ox = ((e.x * 7 + i * 13) % 20) - 10, oy = ((e.y * 11 + i * 17) % 16) - 8;
-              px(sx + ox, sy + oy, 4 + (i % 3), 4 + (i % 2), PAL.blood);
-            }
-          } else if (e.type === "death") {
-            const r = Math.floor((600 - e.life) / 30);
-            for (let i = 0; i < 8; i++) {
-              const angle = (i / 8) * Math.PI * 2;
-              const d = r * 2;
-              px(sx + Math.cos(angle) * d - 3, sy + Math.sin(angle) * d - 3, 6, 6, e.isBoss ? PAL.demon1 : PAL.blood);
-            }
-          } else if (e.type === "slash") {
-            ctx.strokeStyle = "#a0a0a0";
-            ctx.lineWidth = 3;
-            ctx.beginPath();
-            ctx.arc(sx, sy, 20, e.angle - 0.7, e.angle + 0.7);
-            ctx.stroke();
-          } else if (e.type === "fireHit") {
-            const r = Math.floor((300 - e.life) / 20);
-            px(sx - r, sy - r, r * 2, r * 2, PAL.fire1);
-            px(sx - r / 2, sy - r / 2, r, r, PAL.fire3);
-          } else if (e.type === "heal") {
-            const r = Math.floor((600 - e.life) / 40);
-            ctx.strokeStyle = "#44cc44";
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.arc(sx, sy, r * 3, 0, Math.PI * 2);
-            ctx.stroke();
-          } else if (e.type === "dmgText" || e.type === "goldText") {
-            ctx.fillStyle = e.color || PAL.gold;
-            ctx.font = "8px 'Press Start 2P', monospace";
-            ctx.textAlign = "center";
-            ctx.fillText(e.text, sx, sy - (600 - e.life) / 30);
+      showDamageText(x, y, text, color) {
+        const txt = this.add.text(x, y, text, {
+          fontSize: '12px',
+          fontFamily: 'Press Start 2P',
+          color: '#' + color.toString(16).padStart(6, '0')
+        }).setOrigin(0.5).setDepth(100);
+
+        this.tweens.add({
+          targets: txt,
+          y: y - 40,
+          alpha: 0,
+          duration: 700,
+          onComplete: () => txt.destroy()
+        });
+      }
+
+      updateEnemies(delta) {
+        for (const e of this.enemies) {
+          if (e.hp <= 0) continue;
+
+          e.attackCd = Math.max(0, e.attackCd - delta);
+          e.animTime += delta;
+          e.frame = Math.floor(e.animTime / 200) % 3;
+
+          const dist = Phaser.Math.Distance.Between(e.x, e.y, this.player.x, this.player.y);
+
+          if (dist > ENEMY_ATK_RANGE) {
+            // Move toward player
+            const dx = this.player.x - e.x;
+            const dy = this.player.y - e.y;
+            const len = Math.sqrt(dx * dx + dy * dy);
+            const nx = e.x + (dx / len) * e.speed * (delta / 1000);
+            const ny = e.y + (dy / len) * e.speed * (delta / 1000);
+
+            const radius = e.isBoss ? 28 : 18;
+            if (this.canMove(nx, e.y, radius)) e.x = nx;
+            if (this.canMove(e.x, ny, radius)) e.y = ny;
+
+            // Update sprite
+            const texKey = e.isBoss ? 'boss_' + e.frame : 'demon_' + e.frame;
+            e.sprite.setTexture(texKey);
+            e.sprite.setFlipX(dx < 0);
+          } else if (e.attackCd <= 0) {
+            // Attack player
+            e.attackCd = ENEMY_ATK_CD;
+            const texKey = e.isBoss ? 'boss_3' : 'demon_3';
+            e.sprite.setTexture(texKey);
+            this.damagePlayer(e.dmg);
           }
-          ctx.globalAlpha = 1;
+
+          e.sprite.setPosition(e.x, e.y);
+          e.hpBarBg.setPosition(e.x, e.y - (e.isBoss ? 50 : 30));
+          e.hpBarFill.setPosition(e.x - (e.isBoss ? 30 : 16), e.y - (e.isBoss ? 50 : 30));
+          if (e.nameText) e.nameText.setPosition(e.x, e.y - 65);
+        }
+
+        // Remove dead enemies
+        this.enemies = this.enemies.filter(e => e.hp > 0);
+      }
+
+      updateProjectiles(delta) {
+        for (const proj of this.projectiles) {
+          proj.x += proj.vx * (delta / 1000);
+          proj.y += proj.vy * (delta / 1000);
+          proj.ttl -= delta;
+          proj.animTime += delta;
+          proj.frame = Math.floor(proj.animTime / 80) % 4;
+
+          proj.sprite.setTexture('fireball_' + proj.frame);
+          proj.sprite.setPosition(proj.x, proj.y);
+          proj.light.setPosition(proj.x, proj.y);
+
+          // Fire trail particles
+          this.fireEmitter.setPosition(proj.x, proj.y);
+          this.fireEmitter.explode(2);
+
+          // Check wall collision
+          if (this.tileAt(proj.x, proj.y) === this.CELL_WALL) {
+            this.destroyProjectile(proj);
+            continue;
+          }
+
+          // Check enemy collision
+          for (const e of this.enemies) {
+            if (e.hp <= 0) continue;
+            const dist = Phaser.Math.Distance.Between(proj.x, proj.y, e.x, e.y);
+            const hitRadius = e.isBoss ? 40 : 24;
+            if (dist < hitRadius) {
+              this.damageEnemy(e, proj.dmg);
+              this.destroyProjectile(proj);
+              break;
+            }
+          }
+
+          if (proj.ttl <= 0) {
+            this.destroyProjectile(proj);
+          }
+        }
+
+        this.projectiles = this.projectiles.filter(p => p.ttl > 0);
+      }
+
+      destroyProjectile(proj) {
+        // Explosion effect
+        this.fireEmitter.setPosition(proj.x, proj.y);
+        this.fireEmitter.explode(15);
+
+        proj.sprite.destroy();
+        proj.light.destroy();
+        proj.ttl = 0;
+      }
+
+      updatePickups() {
+        const p = this.player;
+        for (let i = this.pickups.length - 1; i >= 0; i--) {
+          const pk = this.pickups[i];
+          const dist = Phaser.Math.Distance.Between(p.x, p.y, pk.x, pk.y);
+
+          if (dist < 32) {
+            if (pk.type === 'gold') {
+              gameState.gold += pk.value;
+              this.showDamageText(pk.x, pk.y - 10, '+' + pk.value, 0xc9a227);
+            } else {
+              const heal = Math.min(pk.value, p.maxHp - p.hp);
+              p.hp += heal;
+              this.showDamageText(pk.x, pk.y - 10, '+' + heal, 0x44ff44);
+            }
+            this.sfxPickup();
+            pk.sprite.destroy();
+            this.pickups.splice(i, 1);
+          }
         }
       }
 
-      function drawTorchLight() {
-        for (const t of state.torches) {
-          const sx = t.x - state.camera.x, sy = t.y - state.camera.y;
-          const flicker = Math.sin(state.time * 8 + t.x) * 10 + 40;
-          const grad = ctx.createRadialGradient(sx, sy, 0, sx, sy, flicker + 60);
-          grad.addColorStop(0, "rgba(255,136,68,0.25)");
-          grad.addColorStop(0.5, "rgba(255,100,40,0.1)");
-          grad.addColorStop(1, "rgba(0,0,0,0)");
-          ctx.fillStyle = grad;
-          ctx.fillRect(sx - 100, sy - 100, 200, 200);
-          px(sx - 2, sy - 6, 4, 8, "#4a3020");
-          const fh = 4 + Math.floor(Math.sin(state.time * 12 + t.x) * 2);
-          px(sx - 2, sy - 6 - fh, 4, fh, PAL.fire1);
-          px(sx - 1, sy - 5 - fh, 2, fh - 2, PAL.fire3);
+      checkStairs() {
+        if (!this.stairsPos) return;
+
+        const p = this.player;
+        const dist = Phaser.Math.Distance.Between(p.x, p.y, this.stairsPos.x, this.stairsPos.y);
+
+        if (dist < 30) {
+          const bossAlive = this.enemies.some(e => e.isBoss && e.hp > 0);
+          if (gameState.floor >= MAX_FLOOR && bossAlive) {
+            gameState.status = "DEFEAT THE BOSS";
+          } else if (gameState.floor < MAX_FLOOR) {
+            this.sfxStairs();
+            gameState.floor++;
+            this.generateFloor(gameState.floor);
+            this.setupPlayer();
+            this.setupCamera();
+          }
         }
       }
 
-      function drawHealthBar(x, y, w, h, hp, maxHp, fillColor, bgColor) {
-        const ratio = hp / maxHp;
-        px(x - w / 2, y, w, h, bgColor);
-        px(x - w / 2, y, Math.floor(w * ratio), h, fillColor);
-        ctx.strokeStyle = "#2a2015";
-        ctx.lineWidth = 1;
-        ctx.strokeRect(x - w / 2 - 0.5, y - 0.5, w + 1, h + 1);
-      }
-
-      function drawVignette() {
-        const grad = ctx.createRadialGradient(canvas.width / 2, canvas.height / 2, canvas.height * 0.3, canvas.width / 2, canvas.height / 2, canvas.height * 0.9);
-        grad.addColorStop(0, "rgba(0,0,0,0)");
-        grad.addColorStop(1, "rgba(0,0,0,0.6)");
-        ctx.fillStyle = grad;
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-      }
-
-      function drawOverlay() {
-        if (!state.paused && !state.gameOver) return;
-        ctx.fillStyle = "rgba(0,0,0,0.8)";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.textAlign = "center";
-        if (state.gameOver) {
-          ctx.fillStyle = state.victory ? "#c9a227" : "#c41e1e";
-          ctx.font = "24px 'Press Start 2P', monospace";
-          ctx.fillText(state.victory ? "VICTORY" : "YOU DIED", canvas.width / 2, canvas.height / 2 - 30);
-          ctx.fillStyle = "#b8a67a";
-          ctx.font = "10px 'Press Start 2P', monospace";
-          ctx.fillText(`FLOOR ${state.floor}  KILLS ${state.kills}  GOLD ${state.gold}`, canvas.width / 2, canvas.height / 2 + 10);
-          ctx.fillText("PRESS R TO RESTART", canvas.width / 2, canvas.height / 2 + 40);
-        } else {
-          ctx.fillStyle = "#b8a67a";
-          ctx.font = "20px 'Press Start 2P', monospace";
-          ctx.fillText("PAUSED", canvas.width / 2, canvas.height / 2);
+      canMove(x, y, radius = 16) {
+        const checks = [
+          { x: x - radius, y: y - radius },
+          { x: x + radius, y: y - radius },
+          { x: x - radius, y: y + radius },
+          { x: x + radius, y: y + radius }
+        ];
+        for (const c of checks) {
+          if (this.tileAt(c.x, c.y) === this.CELL_WALL) return false;
         }
+        return true;
       }
 
-      function render() {
-        ctx.fillStyle = PAL.black;
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        drawMap();
-        drawTorchLight();
-        for (const pk of state.pickups) drawPickup(pk);
-        for (const e of state.enemies) if (e.hp > 0) drawEnemy(e);
-        for (const proj of state.projectiles) drawProjectile(proj);
-        drawPlayer();
-        drawEffects();
-        drawVignette();
-        drawOverlay();
+      tileAt(px, py) {
+        const tx = Math.floor(px / TILE);
+        const ty = Math.floor(py / TILE);
+        if (tx < 0 || tx >= MAP_W || ty < 0 || ty >= MAP_H) return this.CELL_WALL;
+        return this.map[ty]?.[tx] ?? this.CELL_WALL;
       }
 
-      function updateHud() {
-        const p = state.player;
-        hudFloor.textContent = state.floor;
+      updateHUD() {
+        const p = this.player;
+        if (!p) return;
+
+        hudFloor.textContent = gameState.floor;
         hudHp.textContent = Math.max(0, Math.floor(p.hp));
         hudHpMax.textContent = p.maxHp;
-        hudGold.textContent = state.gold;
-        hudKills.textContent = state.kills;
-        hudStatus.textContent = state.status;
-        hudStatus.className = state.gameOver && !state.victory ? "warn" : "";
-        updateSkillEl(skillQEl, p.fireballCd, FIREBALL_CD);
-        updateSkillEl(skillEEl, p.healCd, HEAL_CD);
+        hudHpBar.style.width = Math.max(0, (p.hp / p.maxHp) * 100) + '%';
+        hudGold.textContent = gameState.gold;
+        hudKills.textContent = gameState.kills;
+        hudStatus.textContent = gameState.status;
+        hudStatus.className = gameState.gameOver && !gameState.victory ? 'warn' : '';
+
+        // Skill cooldowns
+        this.updateSkillEl(skillMeleeEl, p.attackCd, PLAYER_ATK_CD);
+        this.updateSkillEl(skillQEl, p.fireballCd, FIREBALL_CD);
+        this.updateSkillEl(skillEEl, p.healCd, HEAL_CD);
       }
 
-      function updateSkillEl(el, cd, maxCd) {
-        let overlay = el.querySelector(".cd-overlay");
-        if (!overlay) { overlay = document.createElement("div"); overlay.className = "cd-overlay"; el.appendChild(overlay); }
-        if (cd > 0) { el.classList.remove("ready"); overlay.textContent = cd.toFixed(1); overlay.style.height = `${(cd / maxCd) * 100}%`; }
-        else { el.classList.add("ready"); overlay.textContent = ""; overlay.style.height = "0"; }
+      updateSkillEl(el, cd, maxCd) {
+        let overlay = el.querySelector('.cd-overlay');
+        if (!overlay) {
+          overlay = document.createElement('div');
+          overlay.className = 'cd-overlay';
+          el.appendChild(overlay);
+        }
+
+        if (cd > 0) {
+          el.classList.remove('ready');
+          overlay.textContent = (cd / 1000).toFixed(1);
+          overlay.style.height = (cd / maxCd * 100) + '%';
+        } else {
+          el.classList.add('ready');
+          overlay.textContent = '';
+          overlay.style.height = '0';
+        }
       }
 
-      let lastTs = performance.now();
-      function loop(ts) {
-        const dt = Math.min(0.05, (ts - lastTs) / 1000);
-        lastTs = ts;
-        update(dt);
-        render();
-        updateHud();
-        requestAnimationFrame(loop);
+      updateMinimap() {
+        if (!this.map || !this.player) return;
+
+        const scale = 3;
+        minimapCanvas.width = MAP_W * scale;
+        minimapCanvas.height = MAP_H * scale;
+
+        minimapCtx.fillStyle = '#0a0806';
+        minimapCtx.fillRect(0, 0, minimapCanvas.width, minimapCanvas.height);
+
+        for (let y = 0; y < MAP_H; y++) {
+          for (let x = 0; x < MAP_W; x++) {
+            const cell = this.map[y]?.[x];
+            if (cell === this.CELL_FLOOR) {
+              minimapCtx.fillStyle = '#2a231c';
+              minimapCtx.fillRect(x * scale, y * scale, scale, scale);
+            } else if (cell === this.CELL_STAIRS) {
+              minimapCtx.fillStyle = '#8b7355';
+              minimapCtx.fillRect(x * scale, y * scale, scale, scale);
+            }
+          }
+        }
+
+        // Draw enemies
+        minimapCtx.fillStyle = '#c41e1e';
+        for (const e of this.enemies) {
+          if (e.hp > 0) {
+            const ex = Math.floor(e.x / TILE) * scale;
+            const ey = Math.floor(e.y / TILE) * scale;
+            minimapCtx.fillRect(ex, ey, scale, scale);
+          }
+        }
+
+        // Draw player
+        minimapCtx.fillStyle = '#44ff44';
+        const px = Math.floor(this.player.x / TILE) * scale;
+        const py = Math.floor(this.player.y / TILE) * scale;
+        minimapCtx.fillRect(px, py, scale, scale);
       }
 
-      function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; ctx.imageSmoothingEnabled = false; }
-      window.addEventListener("resize", resize);
-      window.addEventListener("keydown", (e) => {
-        ensureAudio();
-        if (["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.code)) e.preventDefault();
-        if (e.code === "KeyW" || e.code === "ArrowUp") input.up = true;
-        else if (e.code === "KeyS" || e.code === "ArrowDown") input.down = true;
-        else if (e.code === "KeyA" || e.code === "ArrowLeft") input.left = true;
-        else if (e.code === "KeyD" || e.code === "ArrowRight") input.right = true;
-        else if (e.code === "Space") input.attack = true;
-        else if (e.code === "KeyR") { resetGame(); return; }
-        else if (e.code === "KeyP") { if (!state.gameOver) state.paused = !state.paused; return; }
-        else if (e.code === "KeyQ" && !state.paused && !state.gameOver) useFireball();
-        else if (e.code === "KeyE" && !state.paused && !state.gameOver) useHeal();
-      });
-      window.addEventListener("keyup", (e) => {
-        if (e.code === "KeyW" || e.code === "ArrowUp") input.up = false;
-        else if (e.code === "KeyS" || e.code === "ArrowDown") input.down = false;
-        else if (e.code === "KeyA" || e.code === "ArrowLeft") input.left = false;
-        else if (e.code === "KeyD" || e.code === "ArrowRight") input.right = false;
-        else if (e.code === "Space") input.attack = false;
-      });
-      canvas.addEventListener("mousedown", () => { ensureAudio(); });
-      resize();
-      resetGame();
-      requestAnimationFrame(loop);
-    </script>
-  </body>
+      showOverlay() {
+        if (this.overlayBg) this.overlayBg.destroy();
+        if (this.overlayText) this.overlayText.destroy();
+        if (this.overlaySubtext) this.overlaySubtext.destroy();
+
+        const w = this.cameras.main.width;
+        const h = this.cameras.main.height;
+        const cx = this.cameras.main.scrollX + w / 2;
+        const cy = this.cameras.main.scrollY + h / 2;
+
+        this.overlayBg = this.add.rectangle(cx, cy, w, h, 0x000000, 0.85).setDepth(200);
+
+        if (gameState.gameOver) {
+          const title = gameState.victory ? 'VICTORY' : 'YOU DIED';
+          const color = gameState.victory ? '#c9a227' : '#c41e1e';
+          this.overlayText = this.add.text(cx, cy - 40, title, {
+            fontSize: '32px',
+            fontFamily: 'Press Start 2P',
+            color: color
+          }).setOrigin(0.5).setDepth(201);
+
+          const stats = `FLOOR ${gameState.floor}  KILLS ${gameState.kills}  GOLD ${gameState.gold}`;
+          this.overlaySubtext = this.add.text(cx, cy + 20, stats + '\n\nPRESS R TO RESTART', {
+            fontSize: '10px',
+            fontFamily: 'Press Start 2P',
+            color: '#b8a67a',
+            align: 'center'
+          }).setOrigin(0.5).setDepth(201);
+        } else {
+          this.overlayText = this.add.text(cx, cy, 'PAUSED', {
+            fontSize: '28px',
+            fontFamily: 'Press Start 2P',
+            color: '#b8a67a'
+          }).setOrigin(0.5).setDepth(201);
+
+          this.overlaySubtext = this.add.text(cx, cy + 50, 'PRESS P TO RESUME', {
+            fontSize: '10px',
+            fontFamily: 'Press Start 2P',
+            color: '#6b5d45'
+          }).setOrigin(0.5).setDepth(201);
+        }
+      }
+
+      hideOverlay() {
+        if (this.overlayBg) this.overlayBg.destroy();
+        if (this.overlayText) this.overlayText.destroy();
+        if (this.overlaySubtext) this.overlaySubtext.destroy();
+      }
+
+      restartGame() {
+        this.hideOverlay();
+        gameState = {
+          floor: 1,
+          kills: 0,
+          gold: 0,
+          paused: false,
+          gameOver: false,
+          victory: false,
+          status: "DESCEND..."
+        };
+
+        // Reset player
+        if (this.player) {
+          this.player.sprite.destroy();
+          this.player = null;
+        }
+        if (this.playerLight) {
+          this.playerLight.destroy();
+          this.playerLight = null;
+        }
+
+        this.generateFloor(1);
+        this.setupPlayer();
+        this.setupCamera();
+      }
+    }
+
+    // =====================================================
+    // Phaser Game Configuration
+    // =====================================================
+    const config = {
+      type: Phaser.AUTO,
+      parent: 'game-container',
+      width: window.innerWidth,
+      height: window.innerHeight,
+      pixelArt: true,
+      backgroundColor: '#0a0806',
+      scale: {
+        mode: Phaser.Scale.RESIZE,
+        autoCenter: Phaser.Scale.CENTER_BOTH
+      },
+      scene: [BootScene, GameScene]
+    };
+
+    const game = new Phaser.Game(config);
+
+    // Handle window resize
+    window.addEventListener('resize', () => {
+      game.scale.resize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
 </html>
