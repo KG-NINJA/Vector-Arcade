@@ -3,15 +3,18 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>VECTOR CRYPT</title>
+    <title>BLOOD CRYPT</title>
     <style>
+      @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
       :root {
-        --bg: #030506;
-        --line: #4dffc3;
-        --line2: #7effdb;
-        --enemy: #ff5f7e;
-        --gold: #ffd54f;
-        --hp: #5dff5d;
+        --bg: #0a0806;
+        --panel: #1a1410;
+        --panel-border: #3d2e1f;
+        --gold: #c9a227;
+        --hp-red: #8b1e1e;
+        --hp-fill: #c41e1e;
+        --text: #b8a67a;
+        --text-dim: #6b5d45;
       }
       html, body {
         margin: 0;
@@ -20,108 +23,125 @@
         height: 100%;
         overflow: hidden;
         background: var(--bg);
-        color: var(--line);
-        font-family: monospace;
+        color: var(--text);
+        font-family: 'Press Start 2P', monospace;
+        image-rendering: pixelated;
+        image-rendering: crisp-edges;
       }
       #game {
         width: 100%;
         height: 100%;
         display: block;
+        image-rendering: pixelated;
+        image-rendering: crisp-edges;
       }
       #hud {
         position: fixed;
-        top: 10px;
-        left: 10px;
-        border: 1px solid rgba(77, 255, 195, 0.7);
-        background: rgba(0, 15, 12, 0.8);
-        padding: 10px 14px;
-        font-size: 12px;
-        line-height: 1.55;
-        letter-spacing: 0.05em;
-        text-transform: uppercase;
-        text-shadow: 0 0 8px rgba(77, 255, 195, 0.6);
+        top: 8px;
+        left: 8px;
+        border: 3px solid var(--panel-border);
+        background: linear-gradient(180deg, #1f1812 0%, #120e0a 100%);
+        padding: 12px 16px;
+        font-size: 8px;
+        line-height: 2;
         pointer-events: none;
-        min-width: 140px;
+        min-width: 130px;
+        box-shadow: inset 0 0 10px rgba(0,0,0,0.8), 0 0 8px rgba(0,0,0,0.9);
+      }
+      #hud::before {
+        content: '';
+        position: absolute;
+        top: 2px; left: 2px; right: 2px; bottom: 2px;
+        border: 1px solid #2a2015;
+        pointer-events: none;
+      }
+      .title {
+        color: var(--gold);
+        font-size: 10px;
+        text-shadow: 2px 2px 0 #000;
+        margin-bottom: 6px;
       }
       #help {
         position: fixed;
-        right: 10px;
-        bottom: 10px;
-        border: 1px solid rgba(126, 255, 219, 0.5);
-        background: rgba(0, 10, 8, 0.75);
-        color: var(--line2);
-        padding: 8px 10px;
-        font-size: 11px;
-        line-height: 1.5;
-        text-transform: uppercase;
+        right: 8px;
+        bottom: 8px;
+        border: 3px solid var(--panel-border);
+        background: linear-gradient(180deg, #1f1812 0%, #120e0a 100%);
+        color: var(--text-dim);
+        padding: 10px 12px;
+        font-size: 7px;
+        line-height: 2.2;
         pointer-events: none;
+        box-shadow: inset 0 0 10px rgba(0,0,0,0.8);
       }
-      .warn { color: #ff7a7a; }
+      .warn { color: #c41e1e; }
       .gold { color: var(--gold); }
-      .hp { color: var(--hp); }
+      .hp { color: #e85050; }
       #skillbar {
         position: fixed;
-        bottom: 12px;
+        bottom: 10px;
         left: 50%;
         transform: translateX(-50%);
         display: flex;
-        gap: 10px;
+        gap: 6px;
         pointer-events: none;
       }
       .skill {
-        width: 52px;
-        height: 52px;
-        border: 2px solid var(--line);
-        background: rgba(0, 18, 14, 0.85);
+        width: 44px;
+        height: 44px;
+        border: 3px solid var(--panel-border);
+        background: linear-gradient(180deg, #251c14 0%, #1a1410 100%);
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        font-size: 11px;
+        font-size: 7px;
         position: relative;
+        box-shadow: inset 0 0 8px rgba(0,0,0,0.7);
       }
-      .skill .key { font-size: 9px; color: var(--line2); margin-bottom: 2px; }
+      .skill .key { font-size: 6px; color: var(--text-dim); margin-bottom: 3px; }
       .skill .cd-overlay {
         position: absolute;
         bottom: 0;
         left: 0;
         right: 0;
-        background: rgba(0, 0, 0, 0.75);
-        color: #999;
-        font-size: 10px;
+        background: rgba(0, 0, 0, 0.8);
+        color: #666;
+        font-size: 7px;
         text-align: center;
       }
       .skill.ready {
         border-color: var(--gold);
-        box-shadow: 0 0 10px rgba(255, 213, 79, 0.5);
+        box-shadow: inset 0 0 12px rgba(201, 162, 39, 0.3);
       }
     </style>
   </head>
   <body>
     <canvas id="game"></canvas>
     <div id="hud">
-      VECTOR CRYPT<br />
-      FLOOR: <span id="floor">1</span> / 3<br />
-      <span class="hp">HP: <span id="hp">100</span>/<span id="hpMax">100</span></span><br />
-      <span class="gold">GOLD: <span id="gold">0</span></span><br />
-      KILLS: <span id="kills">0</span><br />
-      <span id="status">DESCEND THE CRYPT</span>
+      <div class="title">BLOOD CRYPT</div>
+      FLOOR <span id="floor">1</span>/3<br />
+      <span class="hp">LIFE <span id="hp">100</span>/<span id="hpMax">100</span></span><br />
+      <span class="gold">GOLD <span id="gold">0</span></span><br />
+      KILLS <span id="kills">0</span><br />
+      <span id="status">DESCEND...</span>
     </div>
     <div id="skillbar">
       <div class="skill" id="skillQ"><span class="key">[Q]</span>FIRE</div>
       <div class="skill" id="skillE"><span class="key">[E]</span>HEAL</div>
     </div>
     <div id="help">
-      WASD/ARROWS MOVE · SPACE ATTACK<br />
-      Q FIREBALL · E HEAL<br />
-      REACH STAIRS ▼ TO DESCEND<br />
-      KILL THE BOSS ON FLOOR 3<br />
-      P PAUSE · R RESTART
+      WASD MOVE<br />
+      SPACE ATTACK<br />
+      Q FIRE · E HEAL<br />
+      FIND STAIRS DOWN<br />
+      SLAY THE DEMON LORD
     </div>
 
     <script>
       const canvas = document.getElementById("game");
       const ctx = canvas.getContext("2d");
+      ctx.imageSmoothingEnabled = false;
 
       const hudFloor = document.getElementById("floor");
       const hudHp = document.getElementById("hp");
@@ -132,34 +152,48 @@
       const skillQEl = document.getElementById("skillQ");
       const skillEEl = document.getElementById("skillE");
 
-      const TILE = 40;
+      const TILE = 48;
       const MAP_W = 32;
       const MAP_H = 24;
-      const PLAYER_SPEED = 150;
+      const PLAYER_SPEED = 140;
       const PLAYER_HP = 100;
       const PLAYER_ATK = 18;
-      const PLAYER_ATK_RANGE = 50;
-      const PLAYER_ATK_CD = 0.35;
+      const PLAYER_ATK_RANGE = 55;
+      const PLAYER_ATK_CD = 0.4;
 
       const FIREBALL_CD = 3;
       const FIREBALL_DMG = 40;
-      const FIREBALL_SPEED = 320;
-      const FIREBALL_RANGE = 350;
+      const FIREBALL_SPEED = 280;
 
       const HEAL_CD = 12;
       const HEAL_AMOUNT = 40;
 
-      const ENEMY_SPEED = 65;
+      const ENEMY_SPEED = 55;
       const ENEMY_HP = 35;
       const ENEMY_DMG = 12;
-      const ENEMY_ATK_RANGE = 40;
+      const ENEMY_ATK_RANGE = 44;
       const ENEMY_ATK_CD = 1.0;
 
       const BOSS_HP = 250;
       const BOSS_DMG = 25;
-      const BOSS_SPEED = 50;
+      const BOSS_SPEED = 45;
 
       const MAX_FLOOR = 3;
+
+      const PAL = {
+        black: "#0a0806",
+        floor1: "#2a231c", floor2: "#352c24", floor3: "#1f1a15",
+        wall1: "#4a3d2f", wall2: "#5c4b3a", wall3: "#3d3225", wallTop: "#2a231c",
+        stairs: "#8b7355",
+        player1: "#c9a27a", player2: "#8b6b4a", player3: "#5c4530", playerArmor: "#4a5568", playerSword: "#a0a0a0",
+        demon1: "#8b2020", demon2: "#5c1515", demon3: "#3d0a0a", demonEye: "#ffcc00",
+        boss1: "#6b1a1a", boss2: "#4a1010", bossHorn: "#3d2a1a",
+        gold1: "#c9a227", gold2: "#8b7020", gold3: "#5c4a15",
+        potion: "#c41e1e", potionGlass: "#4a6080",
+        fire1: "#ff6622", fire2: "#ffaa33", fire3: "#ffdd66",
+        blood: "#5c1515", bloodDark: "#3d0a0a",
+        torch: "#ff8844", torchGlow: "rgba(255,136,68,0.15)"
+      };
 
       let audioCtx = null;
       let audioEnabled = false;
@@ -205,7 +239,7 @@
         const g = audioCtx.createGain();
         src.buffer = buffer;
         flt.type = "lowpass";
-        flt.frequency.value = 700;
+        flt.frequency.value = 600;
         g.gain.setValueAtTime(0.0001, now);
         g.gain.exponentialRampToValueAtTime(vol, now + 0.01);
         g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
@@ -214,17 +248,17 @@
         src.stop(now + dur + 0.02);
       }
 
-      function sfxSwing() { tone("square", 520, 0.06, 0.04); }
-      function sfxHit() { tone("triangle", 280, 0.07, 0.05); noise(0.06, 0.08); }
-      function sfxPickup() { tone("square", 880, 0.06, 0.04); tone("square", 1100, 0.06, 0.035, 0.05); }
-      function sfxFireball() { tone("sawtooth", 600, 0.1, 0.05); tone("sawtooth", 900, 0.08, 0.04, 0.04); }
-      function sfxHeal() { tone("triangle", 660, 0.12, 0.05); tone("triangle", 990, 0.15, 0.045, 0.1); }
-      function sfxStairs() { tone("square", 440, 0.1, 0.05); tone("square", 550, 0.1, 0.05, 0.1); tone("square", 660, 0.15, 0.05, 0.2); }
-      function sfxDeath() { tone("sawtooth", 200, 0.25, 0.07); noise(0.12, 0.2); }
-      function sfxBossDeath() { tone("sawtooth", 150, 0.4, 0.08); tone("square", 100, 0.5, 0.06, 0.1); noise(0.15, 0.35); }
-      function sfxVictory() { tone("square", 523, 0.12, 0.06); tone("square", 659, 0.12, 0.06, 0.12); tone("square", 784, 0.18, 0.06, 0.24); tone("square", 1047, 0.25, 0.06, 0.4); }
-      function sfxDefeat() { tone("square", 330, 0.18, 0.06); tone("square", 262, 0.22, 0.06, 0.18); tone("square", 196, 0.3, 0.06, 0.4); }
-      function sfxEnemyHit() { tone("triangle", 350, 0.05, 0.04); }
+      function sfxSwing() { tone("square", 280, 0.08, 0.05); noise(0.04, 0.06); }
+      function sfxHit() { tone("triangle", 180, 0.1, 0.06); noise(0.08, 0.1); }
+      function sfxPickup() { tone("square", 660, 0.06, 0.04); tone("square", 880, 0.08, 0.035, 0.06); }
+      function sfxFireball() { tone("sawtooth", 400, 0.12, 0.05); noise(0.06, 0.1); }
+      function sfxHeal() { tone("triangle", 440, 0.15, 0.05); tone("triangle", 660, 0.12, 0.04, 0.1); }
+      function sfxStairs() { tone("square", 330, 0.12, 0.05); tone("square", 440, 0.12, 0.05, 0.12); tone("square", 550, 0.15, 0.05, 0.24); }
+      function sfxDeath() { tone("sawtooth", 150, 0.3, 0.08); noise(0.15, 0.25); }
+      function sfxBossDeath() { tone("sawtooth", 100, 0.5, 0.1); tone("square", 80, 0.6, 0.08, 0.15); noise(0.2, 0.4); }
+      function sfxVictory() { tone("square", 392, 0.15, 0.06); tone("square", 494, 0.15, 0.06, 0.15); tone("square", 587, 0.2, 0.06, 0.3); tone("square", 784, 0.3, 0.06, 0.5); }
+      function sfxDefeat() { tone("square", 262, 0.2, 0.06); tone("square", 196, 0.25, 0.06, 0.2); tone("square", 147, 0.35, 0.06, 0.45); }
+      function sfxEnemyHit() { tone("triangle", 220, 0.06, 0.04); }
 
       function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
       function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
@@ -235,10 +269,7 @@
       function randInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
 
       const input = { up: false, down: false, left: false, right: false, attack: false };
-
-      const CELL_WALL = 0;
-      const CELL_FLOOR = 1;
-      const CELL_STAIRS = 2;
+      const CELL_WALL = 0, CELL_FLOOR = 1, CELL_STAIRS = 2;
 
       const state = {
         map: [],
@@ -254,108 +285,68 @@
         paused: false,
         gameOver: false,
         victory: false,
-        status: "DESCEND THE CRYPT"
+        status: "DESCEND...",
+        torches: [],
+        time: 0
       };
 
       function createPlayer(x, y) {
-        return {
-          x, y,
-          hp: PLAYER_HP,
-          maxHp: PLAYER_HP,
-          attackCd: 0,
-          fireballCd: 0,
-          healCd: 0,
-          facing: { x: 1, y: 0 }
-        };
+        return { x, y, hp: PLAYER_HP, maxHp: PLAYER_HP, attackCd: 0, fireballCd: 0, healCd: 0, facing: { x: 0, y: 1 }, frame: 0 };
       }
 
       function createEnemy(x, y, isBoss = false) {
-        return {
-          x, y,
-          hp: isBoss ? BOSS_HP : ENEMY_HP,
-          maxHp: isBoss ? BOSS_HP : ENEMY_HP,
-          dmg: isBoss ? BOSS_DMG : ENEMY_DMG,
-          speed: isBoss ? BOSS_SPEED : ENEMY_SPEED,
-          attackCd: 0,
-          isBoss
-        };
+        return { x, y, hp: isBoss ? BOSS_HP : ENEMY_HP, maxHp: isBoss ? BOSS_HP : ENEMY_HP, dmg: isBoss ? BOSS_DMG : ENEMY_DMG, speed: isBoss ? BOSS_SPEED : ENEMY_SPEED, attackCd: 0, isBoss, frame: 0 };
       }
 
       function createPickup(x, y, type, value) {
         return { x, y, type, value };
       }
 
-      function createProjectile(x, y, dx, dy, dmg, friendly, color) {
-        return { x, y, vx: dx, vy: dy, dmg, friendly, color, ttl: 2 };
+      function createProjectile(x, y, dx, dy, dmg, friendly) {
+        return { x, y, vx: dx, vy: dy, dmg, friendly, ttl: 2, frame: 0 };
       }
 
       function generateMap(floor) {
         const map = [];
         for (let y = 0; y < MAP_H; y++) {
           map[y] = [];
-          for (let x = 0; x < MAP_W; x++) {
-            map[y][x] = CELL_WALL;
-          }
+          for (let x = 0; x < MAP_W; x++) map[y][x] = CELL_WALL;
         }
-
         const rooms = [];
         const roomCount = 5 + floor;
-        
         for (let i = 0; i < roomCount; i++) {
-          const rw = randInt(4, 7);
-          const rh = randInt(4, 6);
-          const rx = randInt(1, MAP_W - rw - 2);
-          const ry = randInt(1, MAP_H - rh - 2);
-          
+          const rw = randInt(4, 7), rh = randInt(4, 6);
+          const rx = randInt(1, MAP_W - rw - 2), ry = randInt(1, MAP_H - rh - 2);
           let overlap = false;
           for (const r of rooms) {
-            if (rx < r.x + r.w + 1 && rx + rw + 1 > r.x && ry < r.y + r.h + 1 && ry + rh + 1 > r.y) {
-              overlap = true;
-              break;
-            }
+            if (rx < r.x + r.w + 1 && rx + rw + 1 > r.x && ry < r.y + r.h + 1 && ry + rh + 1 > r.y) { overlap = true; break; }
           }
           if (overlap) continue;
-
           rooms.push({ x: rx, y: ry, w: rw, h: rh });
-          for (let dy = 0; dy < rh; dy++) {
-            for (let dx = 0; dx < rw; dx++) {
-              map[ry + dy][rx + dx] = CELL_FLOOR;
-            }
-          }
+          for (let dy = 0; dy < rh; dy++) for (let dx = 0; dx < rw; dx++) map[ry + dy][rx + dx] = CELL_FLOOR;
         }
-
         for (let i = 1; i < rooms.length; i++) {
-          const r1 = rooms[i - 1];
-          const r2 = rooms[i];
-          let cx = Math.floor(r1.x + r1.w / 2);
-          let cy = Math.floor(r1.y + r1.h / 2);
-          const tx = Math.floor(r2.x + r2.w / 2);
-          const ty = Math.floor(r2.y + r2.h / 2);
-
-          while (cx !== tx) {
-            if (cx >= 0 && cx < MAP_W && cy >= 0 && cy < MAP_H) map[cy][cx] = CELL_FLOOR;
-            cx += cx < tx ? 1 : -1;
-          }
-          while (cy !== ty) {
-            if (cx >= 0 && cx < MAP_W && cy >= 0 && cy < MAP_H) map[cy][cx] = CELL_FLOOR;
-            cy += cy < ty ? 1 : -1;
-          }
+          const r1 = rooms[i - 1], r2 = rooms[i];
+          let cx = Math.floor(r1.x + r1.w / 2), cy = Math.floor(r1.y + r1.h / 2);
+          const tx = Math.floor(r2.x + r2.w / 2), ty = Math.floor(r2.y + r2.h / 2);
+          while (cx !== tx) { if (cx >= 0 && cx < MAP_W && cy >= 0 && cy < MAP_H) map[cy][cx] = CELL_FLOOR; cx += cx < tx ? 1 : -1; }
+          while (cy !== ty) { if (cx >= 0 && cx < MAP_W && cy >= 0 && cy < MAP_H) map[cy][cx] = CELL_FLOOR; cy += cy < ty ? 1 : -1; }
         }
-
         if (rooms.length > 0) {
           const lastRoom = rooms[rooms.length - 1];
-          const stairX = Math.floor(lastRoom.x + lastRoom.w / 2);
-          const stairY = Math.floor(lastRoom.y + lastRoom.h / 2);
-          map[stairY][stairX] = CELL_STAIRS;
+          map[Math.floor(lastRoom.y + lastRoom.h / 2)][Math.floor(lastRoom.x + lastRoom.w / 2)] = CELL_STAIRS;
         }
-
-        return { map, rooms };
+        const torches = [];
+        for (const r of rooms) {
+          if (Math.random() < 0.7) torches.push({ x: r.x * TILE + 8, y: r.y * TILE + 8 });
+          if (Math.random() < 0.5) torches.push({ x: (r.x + r.w - 1) * TILE + TILE - 8, y: r.y * TILE + 8 });
+        }
+        return { map, rooms, torches };
       }
 
       function spawnEnemies(rooms, floor, isBossFloor) {
         const enemies = [];
         const count = 3 + floor * 2;
-        
         for (let i = 0; i < count && rooms.length > 1; i++) {
           const roomIdx = randInt(1, rooms.length - 1);
           const room = rooms[roomIdx];
@@ -363,14 +354,10 @@
           const ey = (room.y + randInt(1, room.h - 2)) * TILE + TILE / 2;
           enemies.push(createEnemy(ex, ey, false));
         }
-
         if (isBossFloor && rooms.length > 0) {
           const bossRoom = rooms[rooms.length - 1];
-          const bx = (bossRoom.x + bossRoom.w / 2) * TILE;
-          const by = (bossRoom.y + bossRoom.h / 2 - 1) * TILE;
-          enemies.push(createEnemy(bx, by, true));
+          enemies.push(createEnemy((bossRoom.x + bossRoom.w / 2) * TILE, (bossRoom.y + bossRoom.h / 2 - 1) * TILE, true));
         }
-
         return enemies;
       }
 
@@ -381,9 +368,7 @@
           if (Math.random() < 0.6) {
             const px = (room.x + randInt(1, room.w - 2)) * TILE + TILE / 2;
             const py = (room.y + randInt(1, room.h - 2)) * TILE + TILE / 2;
-            const type = Math.random() < 0.3 ? "hp" : "gold";
-            const value = type === "hp" ? randInt(15, 30) : randInt(10, 25);
-            pickups.push(createPickup(px, py, type, value));
+            pickups.push(createPickup(px, py, Math.random() < 0.3 ? "hp" : "gold", Math.random() < 0.3 ? randInt(15, 30) : randInt(10, 25)));
           }
         }
         return pickups;
@@ -391,92 +376,63 @@
 
       function initFloor(floor) {
         const isBossFloor = floor >= MAX_FLOOR;
-        const { map, rooms } = generateMap(floor);
+        const { map, rooms, torches } = generateMap(floor);
         state.map = map;
-
+        state.torches = torches;
         if (rooms.length > 0) {
           const startRoom = rooms[0];
-          const px = (startRoom.x + startRoom.w / 2) * TILE;
-          const py = (startRoom.y + startRoom.h / 2) * TILE;
-          if (state.player) {
-            state.player.x = px;
-            state.player.y = py;
-          } else {
-            state.player = createPlayer(px, py);
-          }
+          const px = (startRoom.x + startRoom.w / 2) * TILE, py = (startRoom.y + startRoom.h / 2) * TILE;
+          if (state.player) { state.player.x = px; state.player.y = py; }
+          else state.player = createPlayer(px, py);
         }
-
         state.enemies = spawnEnemies(rooms, floor, isBossFloor);
         state.pickups = spawnPickups(rooms);
         state.projectiles = [];
         state.effects = [];
         state.floor = floor;
-        state.status = isBossFloor ? "BOSS FLOOR - DESTROY THE DEMON LORD" : "FIND THE STAIRS ▼";
+        state.status = isBossFloor ? "DEMON LORD AWAITS" : "FIND THE STAIRS";
       }
 
       function resetGame() {
-        state.kills = 0;
-        state.gold = 0;
-        state.paused = false;
-        state.gameOver = false;
-        state.victory = false;
-        state.player = null;
+        state.kills = 0; state.gold = 0; state.paused = false;
+        state.gameOver = false; state.victory = false; state.player = null;
+        state.time = 0;
         initFloor(1);
       }
 
       function tileAt(px, py) {
-        const tx = Math.floor(px / TILE);
-        const ty = Math.floor(py / TILE);
+        const tx = Math.floor(px / TILE), ty = Math.floor(py / TILE);
         if (tx < 0 || tx >= MAP_W || ty < 0 || ty >= MAP_H) return CELL_WALL;
         return state.map[ty][tx];
       }
 
-      function canMove(x, y, radius = 12) {
-        const checks = [
-          { x: x - radius, y: y - radius },
-          { x: x + radius, y: y - radius },
-          { x: x - radius, y: y + radius },
-          { x: x + radius, y: y + radius }
-        ];
-        for (const c of checks) {
-          if (tileAt(c.x, c.y) === CELL_WALL) return false;
-        }
+      function canMove(x, y, radius = 14) {
+        const checks = [{ x: x - radius, y: y - radius }, { x: x + radius, y: y - radius }, { x: x - radius, y: y + radius }, { x: x + radius, y: y + radius }];
+        for (const c of checks) if (tileAt(c.x, c.y) === CELL_WALL) return false;
         return true;
       }
 
       function applyDamageToPlayer(dmg) {
         state.player.hp -= dmg;
         sfxHit();
-        state.effects.push({ type: "hit", x: state.player.x, y: state.player.y - 20, text: `-${dmg}`, life: 400 });
-        if (state.player.hp <= 0) {
-          state.player.hp = 0;
-          state.gameOver = true;
-          state.status = "YOU DIED";
-          sfxDefeat();
-        }
+        state.effects.push({ type: "blood", x: state.player.x, y: state.player.y, life: 500 });
+        state.effects.push({ type: "dmgText", x: state.player.x, y: state.player.y - 20, text: `-${dmg}`, life: 600, color: "#c41e1e" });
+        if (state.player.hp <= 0) { state.player.hp = 0; state.gameOver = true; state.status = "YOU HAVE DIED"; sfxDefeat(); }
       }
 
       function applyDamageToEnemy(enemy, dmg) {
         enemy.hp -= dmg;
         sfxEnemyHit();
-        state.effects.push({ type: "hit", x: enemy.x, y: enemy.y - 20, text: `-${dmg}`, life: 400 });
+        state.effects.push({ type: "blood", x: enemy.x, y: enemy.y, life: 400 });
+        state.effects.push({ type: "dmgText", x: enemy.x, y: enemy.y - 20, text: `-${dmg}`, life: 500, color: "#ff6644" });
         if (enemy.hp <= 0) {
-          enemy.hp = 0;
-          state.kills++;
+          enemy.hp = 0; state.kills++;
           const goldDrop = enemy.isBoss ? randInt(50, 100) : randInt(5, 15);
           state.gold += goldDrop;
-          state.effects.push({ type: "gold", x: enemy.x, y: enemy.y, text: `+${goldDrop}G`, life: 600 });
-          state.effects.push({ type: "explode", x: enemy.x, y: enemy.y, r: enemy.isBoss ? 60 : 30, life: 400 });
-          
-          if (enemy.isBoss) {
-            sfxBossDeath();
-            state.victory = true;
-            state.gameOver = true;
-            state.status = "VICTORY - THE CRYPT IS CLEARED";
-            sfxVictory();
-          } else {
-            sfxDeath();
-          }
+          state.effects.push({ type: "goldText", x: enemy.x, y: enemy.y - 10, text: `+${goldDrop}`, life: 700 });
+          state.effects.push({ type: "death", x: enemy.x, y: enemy.y, life: 600, isBoss: enemy.isBoss });
+          if (enemy.isBoss) { sfxBossDeath(); state.victory = true; state.gameOver = true; state.status = "VICTORY"; sfxVictory(); }
+          else sfxDeath();
           return true;
         }
         return false;
@@ -486,24 +442,19 @@
         if (state.player.fireballCd > 0) return false;
         state.player.fireballCd = FIREBALL_CD;
         const dir = state.player.facing;
-        state.projectiles.push(createProjectile(
-          state.player.x, state.player.y,
-          dir.x * FIREBALL_SPEED, dir.y * FIREBALL_SPEED,
-          FIREBALL_DMG, true, "#ff9944"
-        ));
+        state.projectiles.push(createProjectile(state.player.x, state.player.y, dir.x * FIREBALL_SPEED, dir.y * FIREBALL_SPEED, FIREBALL_DMG, true));
         sfxFireball();
-        state.effects.push({ type: "cast", x: state.player.x, y: state.player.y, life: 200 });
         return true;
       }
 
       function useHeal() {
-        if (state.player.healCd > 0) return false;
-        if (state.player.hp >= state.player.maxHp) return false;
+        if (state.player.healCd > 0 || state.player.hp >= state.player.maxHp) return false;
         state.player.healCd = HEAL_CD;
         const healAmt = Math.min(HEAL_AMOUNT, state.player.maxHp - state.player.hp);
         state.player.hp += healAmt;
         sfxHeal();
-        state.effects.push({ type: "heal", x: state.player.x, y: state.player.y - 20, text: `+${healAmt}`, life: 500 });
+        state.effects.push({ type: "heal", x: state.player.x, y: state.player.y, life: 600 });
+        state.effects.push({ type: "dmgText", x: state.player.x, y: state.player.y - 20, text: `+${healAmt}`, life: 600, color: "#44cc44" });
         return true;
       }
 
@@ -512,48 +463,30 @@
         p.attackCd = Math.max(0, p.attackCd - dt);
         p.fireballCd = Math.max(0, p.fireballCd - dt);
         p.healCd = Math.max(0, p.healCd - dt);
-
         let dx = (input.right ? 1 : 0) - (input.left ? 1 : 0);
         let dy = (input.down ? 1 : 0) - (input.up ? 1 : 0);
-        
         if (dx !== 0 || dy !== 0) {
           const d = normalize(dx, dy);
           p.facing = { x: d.x, y: d.y };
-          const nx = p.x + d.x * PLAYER_SPEED * dt;
-          const ny = p.y + d.y * PLAYER_SPEED * dt;
+          const nx = p.x + d.x * PLAYER_SPEED * dt, ny = p.y + d.y * PLAYER_SPEED * dt;
           if (canMove(nx, p.y)) p.x = nx;
           if (canMove(p.x, ny)) p.y = ny;
+          p.frame += dt * 8;
         }
-
         if (input.attack && p.attackCd <= 0) {
           p.attackCd = PLAYER_ATK_CD;
           sfxSwing();
-          state.effects.push({ 
-            type: "swing", 
-            x: p.x + p.facing.x * 30, 
-            y: p.y + p.facing.y * 30, 
-            angle: Math.atan2(p.facing.y, p.facing.x),
-            life: 150 
-          });
-
+          state.effects.push({ type: "slash", x: p.x + p.facing.x * 28, y: p.y + p.facing.y * 28, angle: Math.atan2(p.facing.y, p.facing.x), life: 150 });
           for (const e of state.enemies) {
             if (e.hp <= 0) continue;
-            if (dist(p, e) <= PLAYER_ATK_RANGE) {
-              applyDamageToEnemy(e, PLAYER_ATK);
-            }
+            if (dist(p, e) <= PLAYER_ATK_RANGE) applyDamageToEnemy(e, PLAYER_ATK);
           }
         }
-
         const tile = tileAt(p.x, p.y);
         if (tile === CELL_STAIRS) {
           const bossAlive = state.enemies.some(e => e.isBoss && e.hp > 0);
-          if (state.floor >= MAX_FLOOR && bossAlive) {
-            state.status = "DEFEAT THE BOSS FIRST";
-          } else if (state.floor < MAX_FLOOR) {
-            sfxStairs();
-            state.floor++;
-            initFloor(state.floor);
-          }
+          if (state.floor >= MAX_FLOOR && bossAlive) state.status = "DEFEAT THE BOSS";
+          else if (state.floor < MAX_FLOOR) { sfxStairs(); state.floor++; initFloor(state.floor); }
         }
       }
 
@@ -561,18 +494,14 @@
         for (const e of state.enemies) {
           if (e.hp <= 0) continue;
           e.attackCd = Math.max(0, e.attackCd - dt);
-
+          e.frame += dt * 4;
           const d = dist(e, state.player);
           if (d > ENEMY_ATK_RANGE) {
             const dir = normalize(state.player.x - e.x, state.player.y - e.y);
-            const nx = e.x + dir.x * e.speed * dt;
-            const ny = e.y + dir.y * e.speed * dt;
-            if (canMove(nx, e.y, e.isBoss ? 18 : 12)) e.x = nx;
-            if (canMove(e.x, ny, e.isBoss ? 18 : 12)) e.y = ny;
-          } else if (e.attackCd <= 0) {
-            e.attackCd = ENEMY_ATK_CD;
-            applyDamageToPlayer(e.dmg);
-          }
+            const nx = e.x + dir.x * e.speed * dt, ny = e.y + dir.y * e.speed * dt;
+            if (canMove(nx, e.y, e.isBoss ? 20 : 14)) e.x = nx;
+            if (canMove(e.x, ny, e.isBoss ? 20 : 14)) e.y = ny;
+          } else if (e.attackCd <= 0) { e.attackCd = ENEMY_ATK_CD; applyDamageToPlayer(e.dmg); }
         }
         state.enemies = state.enemies.filter(e => e.hp > 0);
       }
@@ -581,15 +510,9 @@
         const p = state.player;
         for (let i = state.pickups.length - 1; i >= 0; i--) {
           const pk = state.pickups[i];
-          if (dist(p, pk) < 25) {
-            if (pk.type === "gold") {
-              state.gold += pk.value;
-              state.effects.push({ type: "gold", x: pk.x, y: pk.y - 10, text: `+${pk.value}G`, life: 500 });
-            } else if (pk.type === "hp") {
-              const heal = Math.min(pk.value, p.maxHp - p.hp);
-              p.hp += heal;
-              state.effects.push({ type: "heal", x: pk.x, y: pk.y - 10, text: `+${heal}`, life: 500 });
-            }
+          if (dist(p, pk) < 28) {
+            if (pk.type === "gold") { state.gold += pk.value; state.effects.push({ type: "goldText", x: pk.x, y: pk.y - 10, text: `+${pk.value}`, life: 500 }); }
+            else { const heal = Math.min(pk.value, p.maxHp - p.hp); p.hp += heal; state.effects.push({ type: "dmgText", x: pk.x, y: pk.y - 10, text: `+${heal}`, life: 500, color: "#44cc44" }); }
             sfxPickup();
             state.pickups.splice(i, 1);
           }
@@ -598,57 +521,27 @@
 
       function updateProjectiles(dt) {
         for (const proj of state.projectiles) {
-          proj.x += proj.vx * dt;
-          proj.y += proj.vy * dt;
-          proj.ttl -= dt;
-
-          if (tileAt(proj.x, proj.y) === CELL_WALL) {
-            proj.ttl = 0;
-            state.effects.push({ type: "explode", x: proj.x, y: proj.y, r: 15, life: 200 });
-            continue;
-          }
-
+          proj.x += proj.vx * dt; proj.y += proj.vy * dt; proj.ttl -= dt; proj.frame += dt * 12;
+          if (tileAt(proj.x, proj.y) === CELL_WALL) { proj.ttl = 0; state.effects.push({ type: "fireHit", x: proj.x, y: proj.y, life: 300 }); continue; }
           if (proj.friendly) {
             for (const e of state.enemies) {
               if (e.hp <= 0) continue;
-              const hitR = e.isBoss ? 30 : 18;
-              if (dist(proj, e) < hitR) {
-                applyDamageToEnemy(e, proj.dmg);
-                proj.ttl = 0;
-                state.effects.push({ type: "explode", x: proj.x, y: proj.y, r: 20, life: 250 });
-                break;
-              }
+              if (dist(proj, e) < (e.isBoss ? 32 : 20)) { applyDamageToEnemy(e, proj.dmg); proj.ttl = 0; state.effects.push({ type: "fireHit", x: proj.x, y: proj.y, life: 300 }); break; }
             }
-          } else {
-            if (dist(proj, state.player) < 18) {
-              applyDamageToPlayer(proj.dmg);
-              proj.ttl = 0;
-            }
-          }
+          } else if (dist(proj, state.player) < 18) { applyDamageToPlayer(proj.dmg); proj.ttl = 0; }
         }
         state.projectiles = state.projectiles.filter(p => p.ttl > 0);
       }
 
       function updateEffects(dt) {
-        for (const e of state.effects) {
-          e.life -= dt * 1000;
-          if (e.type === "explode") e.r += dt * 60;
-        }
+        for (const e of state.effects) e.life -= dt * 1000;
         state.effects = state.effects.filter(e => e.life > 0);
       }
 
       function update(dt) {
-        if (state.paused || state.gameOver) {
-          updateEffects(dt);
-          return;
-        }
-
-        updatePlayer(dt);
-        updateEnemies(dt);
-        updatePickups();
-        updateProjectiles(dt);
-        updateEffects(dt);
-
+        state.time += dt;
+        if (state.paused || state.gameOver) { updateEffects(dt); return; }
+        updatePlayer(dt); updateEnemies(dt); updatePickups(); updateProjectiles(dt); updateEffects(dt);
         const p = state.player;
         state.camera.x += (p.x - canvas.width / 2 - state.camera.x) * 0.1;
         state.camera.y += (p.y - canvas.height / 2 - state.camera.y) * 0.1;
@@ -656,36 +549,52 @@
         state.camera.y = clamp(state.camera.y, 0, MAP_H * TILE - canvas.height);
       }
 
+      function px(x, y, w, h, color) { ctx.fillStyle = color; ctx.fillRect(Math.floor(x), Math.floor(y), w, h); }
+
+      function drawFloorTile(sx, sy) {
+        px(sx, sy, TILE, TILE, PAL.floor1);
+        for (let i = 0; i < 4; i++) {
+          const ox = ((sx * 7 + sy * 13 + i * 17) % 32), oy = ((sx * 11 + sy * 5 + i * 23) % 28);
+          px(sx + ox, sy + oy, 4, 4, PAL.floor2);
+        }
+        px(sx + ((sx + sy) % 18) + 6, sy + ((sx * 3 + sy * 2) % 20) + 4, 2, 2, PAL.floor3);
+      }
+
+      function drawWallTile(sx, sy, hasFloorBelow) {
+        px(sx, sy, TILE, TILE, PAL.wall1);
+        px(sx + 2, sy + 2, TILE - 4, 6, PAL.wall2);
+        px(sx + 4, sy + 4, TILE - 8, 2, PAL.wall3);
+        if (hasFloorBelow) {
+          px(sx, sy + TILE - 10, TILE, 10, PAL.wallTop);
+          px(sx + 2, sy + TILE - 8, TILE - 4, 2, PAL.wall3);
+        }
+        px(sx + ((sx + sy) % 12) + 8, sy + ((sx * 2 + sy) % 16) + 12, 3, 3, PAL.wall3);
+      }
+
+      function drawStairsTile(sx, sy) {
+        drawFloorTile(sx, sy);
+        const cx = sx + TILE / 2, cy = sy + TILE / 2;
+        px(cx - 14, cy - 10, 28, 20, PAL.wall3);
+        px(cx - 12, cy - 8, 24, 4, PAL.stairs);
+        px(cx - 10, cy - 2, 20, 4, PAL.stairs);
+        px(cx - 8, cy + 4, 16, 4, PAL.stairs);
+        px(cx - 12, cy + 10, 2, 4, PAL.wall1);
+        px(cx + 10, cy + 10, 2, 4, PAL.wall1);
+      }
+
       function drawMap() {
-        const startX = Math.floor(state.camera.x / TILE);
-        const startY = Math.floor(state.camera.y / TILE);
-        const endX = Math.min(MAP_W, startX + Math.ceil(canvas.width / TILE) + 2);
-        const endY = Math.min(MAP_H, startY + Math.ceil(canvas.height / TILE) + 2);
-
-        for (let y = startY; y < endY; y++) {
-          for (let x = startX; x < endX; x++) {
+        const startX = Math.floor(state.camera.x / TILE) - 1, startY = Math.floor(state.camera.y / TILE) - 1;
+        const endX = Math.min(MAP_W, startX + Math.ceil(canvas.width / TILE) + 3);
+        const endY = Math.min(MAP_H, startY + Math.ceil(canvas.height / TILE) + 3);
+        for (let y = Math.max(0, startY); y < endY; y++) {
+          for (let x = Math.max(0, startX); x < endX; x++) {
             const cell = state.map[y]?.[x];
-            const sx = x * TILE - state.camera.x;
-            const sy = y * TILE - state.camera.y;
-
-            if (cell === CELL_FLOOR) {
-              ctx.strokeStyle = "rgba(77, 255, 195, 0.15)";
-              ctx.lineWidth = 1;
-              ctx.strokeRect(sx, sy, TILE, TILE);
-            } else if (cell === CELL_STAIRS) {
-              ctx.strokeStyle = "#ffd54f";
-              ctx.lineWidth = 2;
-              ctx.strokeRect(sx + 4, sy + 4, TILE - 8, TILE - 8);
-              ctx.fillStyle = "#ffd54f";
-              ctx.font = "bold 16px monospace";
-              ctx.textAlign = "center";
-              ctx.fillText("▼", sx + TILE / 2, sy + TILE / 2 + 5);
-            } else if (cell === CELL_WALL) {
-              ctx.fillStyle = "rgba(30, 50, 45, 0.9)";
-              ctx.fillRect(sx, sy, TILE, TILE);
-              ctx.strokeStyle = "rgba(77, 255, 195, 0.25)";
-              ctx.lineWidth = 1;
-              ctx.strokeRect(sx, sy, TILE, TILE);
+            const sx = x * TILE - state.camera.x, sy = y * TILE - state.camera.y;
+            if (cell === CELL_FLOOR) drawFloorTile(sx, sy);
+            else if (cell === CELL_STAIRS) drawStairsTile(sx, sy);
+            else if (cell === CELL_WALL) {
+              const below = y < MAP_H - 1 ? state.map[y + 1]?.[x] : CELL_WALL;
+              drawWallTile(sx, sy, below !== CELL_WALL);
             }
           }
         }
@@ -693,267 +602,188 @@
 
       function drawPlayer() {
         const p = state.player;
-        const sx = p.x - state.camera.x;
-        const sy = p.y - state.camera.y;
-
-        ctx.save();
-        ctx.strokeStyle = "#4dffc3";
-        ctx.lineWidth = 2;
-        ctx.shadowColor = "#4dffc3";
-        ctx.shadowBlur = 12;
-
-        ctx.beginPath();
-        ctx.arc(sx, sy - 6, 8, 0, Math.PI * 2);
-        ctx.stroke();
-
-        ctx.beginPath();
-        ctx.moveTo(sx, sy + 2);
-        ctx.lineTo(sx - 10, sy + 18);
-        ctx.moveTo(sx, sy + 2);
-        ctx.lineTo(sx + 10, sy + 18);
-        ctx.moveTo(sx, sy + 2);
-        ctx.lineTo(sx, sy + 14);
-        ctx.moveTo(sx - 12, sy + 6);
-        ctx.lineTo(sx + 12, sy + 6);
-        ctx.stroke();
-
-        const wx = sx + p.facing.x * 20;
-        const wy = sy + p.facing.y * 20;
-        ctx.strokeStyle = "#7effdb";
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(sx + p.facing.x * 8, sy + p.facing.y * 8);
-        ctx.lineTo(wx, wy);
-        ctx.stroke();
-
-        ctx.restore();
-
-        const hpRatio = p.hp / p.maxHp;
-        ctx.fillStyle = "rgba(0,0,0,0.5)";
-        ctx.fillRect(sx - 20, sy - 32, 40, 5);
-        ctx.fillStyle = hpRatio > 0.3 ? "#5dff5d" : "#ff5555";
-        ctx.fillRect(sx - 20, sy - 32, 40 * hpRatio, 5);
-        ctx.strokeStyle = "rgba(255,255,255,0.4)";
-        ctx.lineWidth = 1;
-        ctx.strokeRect(sx - 20, sy - 32, 40, 5);
+        const sx = Math.floor(p.x - state.camera.x), sy = Math.floor(p.y - state.camera.y);
+        const bob = Math.floor(Math.sin(p.frame) * 2);
+        px(sx - 5, sy - 16 + bob, 10, 10, PAL.player1);
+        px(sx - 4, sy - 15 + bob, 8, 8, PAL.player2);
+        px(sx - 3, sy - 14 + bob, 2, 2, "#1a1a1a");
+        px(sx + 1, sy - 14 + bob, 2, 2, "#1a1a1a");
+        px(sx - 6, sy - 6 + bob, 12, 14, PAL.playerArmor);
+        px(sx - 5, sy - 5 + bob, 10, 12, PAL.player3);
+        px(sx - 8, sy - 4 + bob, 4, 8, PAL.player1);
+        px(sx + 4, sy - 4 + bob, 4, 8, PAL.player1);
+        px(sx - 4, sy + 8, 3, 8, PAL.player2);
+        px(sx + 1, sy + 8, 3, 8, PAL.player2);
+        const wx = sx + Math.floor(p.facing.x * 14), wy = sy + Math.floor(p.facing.y * 14) - 4;
+        px(wx - 1, wy - 8, 2, 16, PAL.playerSword);
+        px(wx - 2, wy - 10, 4, 3, PAL.playerSword);
+        drawHealthBar(sx, sy - 26, 24, 4, p.hp, p.maxHp, "#44aa44", "#1a3a1a");
       }
 
       function drawEnemy(e) {
-        const sx = e.x - state.camera.x;
-        const sy = e.y - state.camera.y;
-        const r = e.isBoss ? 22 : 14;
-
-        ctx.save();
-        ctx.strokeStyle = e.isBoss ? "#ff3366" : "#ff5f7e";
-        ctx.lineWidth = e.isBoss ? 3 : 2;
-        ctx.shadowColor = ctx.strokeStyle;
-        ctx.shadowBlur = e.isBoss ? 16 : 10;
-
+        const sx = Math.floor(e.x - state.camera.x), sy = Math.floor(e.y - state.camera.y);
+        const bob = Math.floor(Math.sin(e.frame) * 2);
+        const size = e.isBoss ? 1.8 : 1;
+        const s = (v) => Math.floor(v * size);
         if (e.isBoss) {
-          ctx.beginPath();
-          ctx.moveTo(sx, sy - r - 8);
-          ctx.lineTo(sx - r, sy);
-          ctx.lineTo(sx - r * 0.6, sy + r);
-          ctx.lineTo(sx + r * 0.6, sy + r);
-          ctx.lineTo(sx + r, sy);
-          ctx.closePath();
-          ctx.stroke();
-
-          ctx.beginPath();
-          ctx.moveTo(sx - r - 5, sy - 10);
-          ctx.lineTo(sx - r * 0.5, sy - 5);
-          ctx.moveTo(sx + r + 5, sy - 10);
-          ctx.lineTo(sx + r * 0.5, sy - 5);
-          ctx.stroke();
-
-          ctx.fillStyle = "#ff3366";
-          ctx.beginPath();
-          ctx.arc(sx - 6, sy - 5, 3, 0, Math.PI * 2);
-          ctx.arc(sx + 6, sy - 5, 3, 0, Math.PI * 2);
-          ctx.fill();
-        } else {
-          ctx.beginPath();
-          ctx.arc(sx, sy - 4, r * 0.7, 0, Math.PI * 2);
-          ctx.stroke();
-          ctx.beginPath();
-          ctx.moveTo(sx - r * 0.5, sy + 4);
-          ctx.lineTo(sx + r * 0.5, sy + 4);
-          ctx.lineTo(sx + r * 0.3, sy + r);
-          ctx.lineTo(sx - r * 0.3, sy + r);
-          ctx.closePath();
-          ctx.stroke();
+          px(sx - s(8), sy - s(28) + bob, s(4), s(12), PAL.bossHorn);
+          px(sx + s(4), sy - s(28) + bob, s(4), s(12), PAL.bossHorn);
         }
-
-        ctx.restore();
-
-        const hpRatio = e.hp / e.maxHp;
-        const barW = e.isBoss ? 60 : 30;
-        ctx.fillStyle = "rgba(0,0,0,0.5)";
-        ctx.fillRect(sx - barW / 2, sy - r - 18, barW, 4);
-        ctx.fillStyle = "#ff5f7e";
-        ctx.fillRect(sx - barW / 2, sy - r - 18, barW * hpRatio, 4);
-        ctx.strokeStyle = "rgba(255,255,255,0.3)";
-        ctx.lineWidth = 1;
-        ctx.strokeRect(sx - barW / 2, sy - r - 18, barW, 4);
-
+        px(sx - s(8), sy - s(18) + bob, s(16), s(14), PAL.demon1);
+        px(sx - s(6), sy - s(16) + bob, s(12), s(10), PAL.demon2);
+        px(sx - s(5), sy - s(14) + bob, 3, 3, PAL.demonEye);
+        px(sx + s(2), sy - s(14) + bob, 3, 3, PAL.demonEye);
+        px(sx - s(3), sy - s(8) + bob, s(6), 3, PAL.demon3);
+        px(sx - s(10), sy - s(8) + bob, s(20), s(16), PAL.demon1);
+        px(sx - s(8), sy - s(6) + bob, s(16), s(12), PAL.demon2);
+        px(sx - s(12), sy - s(4) + bob, s(6), s(8), PAL.demon1);
+        px(sx + s(6), sy - s(4) + bob, s(6), s(8), PAL.demon1);
+        px(sx - s(6), sy + s(8), s(4), s(6), PAL.demon2);
+        px(sx + s(2), sy + s(8), s(4), s(6), PAL.demon2);
+        const barW = e.isBoss ? 48 : 24;
+        drawHealthBar(sx, sy - s(32), barW, 4, e.hp, e.maxHp, "#cc3333", "#3a1a1a");
         if (e.isBoss) {
-          ctx.fillStyle = "#ff3366";
-          ctx.font = "bold 10px monospace";
+          ctx.fillStyle = "#c41e1e";
+          ctx.font = "8px 'Press Start 2P', monospace";
           ctx.textAlign = "center";
-          ctx.fillText("BOSS", sx, sy - r - 22);
+          ctx.fillText("DEMON LORD", sx, sy - s(38));
         }
       }
 
       function drawPickup(pk) {
-        const sx = pk.x - state.camera.x;
-        const sy = pk.y - state.camera.y;
-        const bob = Math.sin(Date.now() / 200) * 3;
-
-        ctx.save();
+        const sx = Math.floor(pk.x - state.camera.x), sy = Math.floor(pk.y - state.camera.y);
+        const bob = Math.floor(Math.sin(state.time * 4) * 2);
         if (pk.type === "gold") {
-          ctx.strokeStyle = "#ffd54f";
-          ctx.fillStyle = "rgba(255, 213, 79, 0.3)";
+          px(sx - 6, sy - 4 + bob, 12, 8, PAL.gold2);
+          px(sx - 4, sy - 6 + bob, 8, 2, PAL.gold1);
+          px(sx - 5, sy - 3 + bob, 10, 6, PAL.gold1);
+          px(sx - 3, sy - 2 + bob, 2, 2, PAL.gold3);
+          px(sx + 2, sy + bob, 3, 3, PAL.gold3);
         } else {
-          ctx.strokeStyle = "#5dff5d";
-          ctx.fillStyle = "rgba(93, 255, 93, 0.3)";
+          px(sx - 4, sy - 10 + bob, 8, 12, PAL.potionGlass);
+          px(sx - 3, sy - 8 + bob, 6, 8, PAL.potion);
+          px(sx - 2, sy - 6 + bob, 2, 4, "#ff6666");
+          px(sx - 3, sy - 11 + bob, 6, 2, PAL.gold2);
         }
-        ctx.lineWidth = 2;
-        ctx.shadowColor = ctx.strokeStyle;
-        ctx.shadowBlur = 8;
-
-        ctx.beginPath();
-        ctx.arc(sx, sy + bob, 10, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-
-        ctx.fillStyle = ctx.strokeStyle;
-        ctx.font = "bold 10px monospace";
-        ctx.textAlign = "center";
-        ctx.fillText(pk.type === "gold" ? "G" : "+", sx, sy + bob + 4);
-        ctx.restore();
       }
 
       function drawProjectile(proj) {
-        const sx = proj.x - state.camera.x;
-        const sy = proj.y - state.camera.y;
-
-        ctx.save();
-        ctx.strokeStyle = proj.color;
-        ctx.fillStyle = proj.color;
-        ctx.shadowColor = proj.color;
-        ctx.shadowBlur = 12;
-        ctx.lineWidth = 2;
-
-        ctx.beginPath();
-        ctx.arc(sx, sy, 6, 0, Math.PI * 2);
-        ctx.fill();
-
-        const angle = Math.atan2(proj.vy, proj.vx);
-        ctx.beginPath();
-        ctx.moveTo(sx - Math.cos(angle) * 12, sy - Math.sin(angle) * 12);
-        ctx.lineTo(sx, sy);
-        ctx.stroke();
-
-        ctx.restore();
+        const sx = Math.floor(proj.x - state.camera.x), sy = Math.floor(proj.y - state.camera.y);
+        const flicker = Math.floor(proj.frame) % 3;
+        px(sx - 6, sy - 6, 12, 12, flicker === 0 ? PAL.fire1 : (flicker === 1 ? PAL.fire2 : PAL.fire3));
+        px(sx - 4, sy - 4, 8, 8, flicker === 1 ? PAL.fire1 : PAL.fire2);
+        px(sx - 2, sy - 2, 4, 4, PAL.fire3);
       }
 
       function drawEffects() {
         for (const e of state.effects) {
-          const sx = e.x - state.camera.x;
-          const sy = e.y - state.camera.y;
-          const alpha = Math.min(1, e.life / 200);
-
-          ctx.save();
+          const sx = Math.floor(e.x - state.camera.x), sy = Math.floor(e.y - state.camera.y);
+          const alpha = Math.min(1, e.life / 300);
           ctx.globalAlpha = alpha;
-
-          if (e.type === "hit") {
-            ctx.fillStyle = "#ff6666";
-            ctx.font = "bold 12px monospace";
-            ctx.textAlign = "center";
-            ctx.fillText(e.text, sx, sy);
-          } else if (e.type === "gold") {
-            ctx.fillStyle = "#ffd54f";
-            ctx.font = "bold 12px monospace";
-            ctx.textAlign = "center";
-            ctx.fillText(e.text, sx, sy);
-          } else if (e.type === "heal") {
-            ctx.fillStyle = "#5dff5d";
-            ctx.font = "bold 12px monospace";
-            ctx.textAlign = "center";
-            ctx.fillText(e.text, sx, sy);
-          } else if (e.type === "explode") {
-            ctx.strokeStyle = "#ffaa55";
-            ctx.lineWidth = 2;
-            for (let i = 0; i < 6; i++) {
-              const angle = (i / 6) * Math.PI * 2;
-              ctx.beginPath();
-              ctx.moveTo(sx + Math.cos(angle) * e.r * 0.3, sy + Math.sin(angle) * e.r * 0.3);
-              ctx.lineTo(sx + Math.cos(angle) * e.r, sy + Math.sin(angle) * e.r);
-              ctx.stroke();
+          if (e.type === "blood") {
+            for (let i = 0; i < 5; i++) {
+              const ox = ((e.x * 7 + i * 13) % 20) - 10, oy = ((e.y * 11 + i * 17) % 16) - 8;
+              px(sx + ox, sy + oy, 4 + (i % 3), 4 + (i % 2), PAL.blood);
             }
-          } else if (e.type === "swing") {
-            ctx.strokeStyle = "#7effdb";
+          } else if (e.type === "death") {
+            const r = Math.floor((600 - e.life) / 30);
+            for (let i = 0; i < 8; i++) {
+              const angle = (i / 8) * Math.PI * 2;
+              const d = r * 2;
+              px(sx + Math.cos(angle) * d - 3, sy + Math.sin(angle) * d - 3, 6, 6, e.isBoss ? PAL.demon1 : PAL.blood);
+            }
+          } else if (e.type === "slash") {
+            ctx.strokeStyle = "#a0a0a0";
             ctx.lineWidth = 3;
             ctx.beginPath();
-            ctx.arc(sx, sy, 25, e.angle - 0.8, e.angle + 0.8);
+            ctx.arc(sx, sy, 20, e.angle - 0.7, e.angle + 0.7);
             ctx.stroke();
-          } else if (e.type === "cast") {
-            ctx.strokeStyle = "#ff9944";
+          } else if (e.type === "fireHit") {
+            const r = Math.floor((300 - e.life) / 20);
+            px(sx - r, sy - r, r * 2, r * 2, PAL.fire1);
+            px(sx - r / 2, sy - r / 2, r, r, PAL.fire3);
+          } else if (e.type === "heal") {
+            const r = Math.floor((600 - e.life) / 40);
+            ctx.strokeStyle = "#44cc44";
             ctx.lineWidth = 2;
             ctx.beginPath();
-            ctx.arc(sx, sy, 20 + (200 - e.life) * 0.15, 0, Math.PI * 2);
+            ctx.arc(sx, sy, r * 3, 0, Math.PI * 2);
             ctx.stroke();
+          } else if (e.type === "dmgText" || e.type === "goldText") {
+            ctx.fillStyle = e.color || PAL.gold;
+            ctx.font = "8px 'Press Start 2P', monospace";
+            ctx.textAlign = "center";
+            ctx.fillText(e.text, sx, sy - (600 - e.life) / 30);
           }
-
-          ctx.restore();
+          ctx.globalAlpha = 1;
         }
       }
 
-      function drawScanlines() {
-        ctx.strokeStyle = "rgba(77, 255, 195, 0.035)";
-        ctx.lineWidth = 1;
-        for (let y = 0; y < canvas.height; y += 3) {
-          ctx.beginPath();
-          ctx.moveTo(0, y + 0.5);
-          ctx.lineTo(canvas.width, y + 0.5);
-          ctx.stroke();
+      function drawTorchLight() {
+        for (const t of state.torches) {
+          const sx = t.x - state.camera.x, sy = t.y - state.camera.y;
+          const flicker = Math.sin(state.time * 8 + t.x) * 10 + 40;
+          const grad = ctx.createRadialGradient(sx, sy, 0, sx, sy, flicker + 60);
+          grad.addColorStop(0, "rgba(255,136,68,0.25)");
+          grad.addColorStop(0.5, "rgba(255,100,40,0.1)");
+          grad.addColorStop(1, "rgba(0,0,0,0)");
+          ctx.fillStyle = grad;
+          ctx.fillRect(sx - 100, sy - 100, 200, 200);
+          px(sx - 2, sy - 6, 4, 8, "#4a3020");
+          const fh = 4 + Math.floor(Math.sin(state.time * 12 + t.x) * 2);
+          px(sx - 2, sy - 6 - fh, 4, fh, PAL.fire1);
+          px(sx - 1, sy - 5 - fh, 2, fh - 2, PAL.fire3);
         }
+      }
+
+      function drawHealthBar(x, y, w, h, hp, maxHp, fillColor, bgColor) {
+        const ratio = hp / maxHp;
+        px(x - w / 2, y, w, h, bgColor);
+        px(x - w / 2, y, Math.floor(w * ratio), h, fillColor);
+        ctx.strokeStyle = "#2a2015";
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x - w / 2 - 0.5, y - 0.5, w + 1, h + 1);
+      }
+
+      function drawVignette() {
+        const grad = ctx.createRadialGradient(canvas.width / 2, canvas.height / 2, canvas.height * 0.3, canvas.width / 2, canvas.height / 2, canvas.height * 0.9);
+        grad.addColorStop(0, "rgba(0,0,0,0)");
+        grad.addColorStop(1, "rgba(0,0,0,0.6)");
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
       }
 
       function drawOverlay() {
         if (!state.paused && !state.gameOver) return;
-
-        ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+        ctx.fillStyle = "rgba(0,0,0,0.8)";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-
         ctx.textAlign = "center";
         if (state.gameOver) {
-          ctx.fillStyle = state.victory ? "#4dffc3" : "#ff5f7e";
-          ctx.font = "bold 42px monospace";
-          ctx.fillText(state.victory ? "VICTORY" : "DEFEAT", canvas.width / 2, canvas.height / 2 - 30);
-          
-          ctx.fillStyle = "#ffffff";
-          ctx.font = "16px monospace";
-          ctx.fillText(`FLOOR: ${state.floor}  KILLS: ${state.kills}  GOLD: ${state.gold}`, canvas.width / 2, canvas.height / 2 + 10);
-          ctx.fillText("PRESS R TO RESTART", canvas.width / 2, canvas.height / 2 + 45);
+          ctx.fillStyle = state.victory ? "#c9a227" : "#c41e1e";
+          ctx.font = "24px 'Press Start 2P', monospace";
+          ctx.fillText(state.victory ? "VICTORY" : "YOU DIED", canvas.width / 2, canvas.height / 2 - 30);
+          ctx.fillStyle = "#b8a67a";
+          ctx.font = "10px 'Press Start 2P', monospace";
+          ctx.fillText(`FLOOR ${state.floor}  KILLS ${state.kills}  GOLD ${state.gold}`, canvas.width / 2, canvas.height / 2 + 10);
+          ctx.fillText("PRESS R TO RESTART", canvas.width / 2, canvas.height / 2 + 40);
         } else {
-          ctx.fillStyle = "#ffffff";
-          ctx.font = "bold 36px monospace";
+          ctx.fillStyle = "#b8a67a";
+          ctx.font = "20px 'Press Start 2P', monospace";
           ctx.fillText("PAUSED", canvas.width / 2, canvas.height / 2);
         }
       }
 
       function render() {
-        ctx.fillStyle = "#030506";
+        ctx.fillStyle = PAL.black;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-
         drawMap();
+        drawTorchLight();
         for (const pk of state.pickups) drawPickup(pk);
         for (const e of state.enemies) if (e.hp > 0) drawEnemy(e);
         for (const proj of state.projectiles) drawProjectile(proj);
         drawPlayer();
         drawEffects();
-        drawScanlines();
+        drawVignette();
         drawOverlay();
       }
 
@@ -966,27 +796,15 @@
         hudKills.textContent = state.kills;
         hudStatus.textContent = state.status;
         hudStatus.className = state.gameOver && !state.victory ? "warn" : "";
-
         updateSkillEl(skillQEl, p.fireballCd, FIREBALL_CD);
         updateSkillEl(skillEEl, p.healCd, HEAL_CD);
       }
 
       function updateSkillEl(el, cd, maxCd) {
         let overlay = el.querySelector(".cd-overlay");
-        if (!overlay) {
-          overlay = document.createElement("div");
-          overlay.className = "cd-overlay";
-          el.appendChild(overlay);
-        }
-        if (cd > 0) {
-          el.classList.remove("ready");
-          overlay.textContent = cd.toFixed(1);
-          overlay.style.height = `${(cd / maxCd) * 100}%`;
-        } else {
-          el.classList.add("ready");
-          overlay.textContent = "";
-          overlay.style.height = "0";
-        }
+        if (!overlay) { overlay = document.createElement("div"); overlay.className = "cd-overlay"; el.appendChild(overlay); }
+        if (cd > 0) { el.classList.remove("ready"); overlay.textContent = cd.toFixed(1); overlay.style.height = `${(cd / maxCd) * 100}%`; }
+        else { el.classList.add("ready"); overlay.textContent = ""; overlay.style.height = "0"; }
       }
 
       let lastTs = performance.now();
@@ -999,46 +817,29 @@
         requestAnimationFrame(loop);
       }
 
-      function resize() {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-      }
-
+      function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; ctx.imageSmoothingEnabled = false; }
       window.addEventListener("resize", resize);
-
       window.addEventListener("keydown", (e) => {
         ensureAudio();
-        const code = e.code;
-        if (["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(code)) {
-          e.preventDefault();
-        }
-
-        if (code === "KeyW" || code === "ArrowUp") input.up = true;
-        else if (code === "KeyS" || code === "ArrowDown") input.down = true;
-        else if (code === "KeyA" || code === "ArrowLeft") input.left = true;
-        else if (code === "KeyD" || code === "ArrowRight") input.right = true;
-        else if (code === "Space") input.attack = true;
-        else if (code === "KeyR") { resetGame(); return; }
-        else if (code === "KeyP") { if (!state.gameOver) state.paused = !state.paused; return; }
-        else if (code === "KeyQ" && !state.paused && !state.gameOver) {
-          useFireball();
-        }
-        else if (code === "KeyE" && !state.paused && !state.gameOver) {
-          useHeal();
-        }
+        if (["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.code)) e.preventDefault();
+        if (e.code === "KeyW" || e.code === "ArrowUp") input.up = true;
+        else if (e.code === "KeyS" || e.code === "ArrowDown") input.down = true;
+        else if (e.code === "KeyA" || e.code === "ArrowLeft") input.left = true;
+        else if (e.code === "KeyD" || e.code === "ArrowRight") input.right = true;
+        else if (e.code === "Space") input.attack = true;
+        else if (e.code === "KeyR") { resetGame(); return; }
+        else if (e.code === "KeyP") { if (!state.gameOver) state.paused = !state.paused; return; }
+        else if (e.code === "KeyQ" && !state.paused && !state.gameOver) useFireball();
+        else if (e.code === "KeyE" && !state.paused && !state.gameOver) useHeal();
       });
-
       window.addEventListener("keyup", (e) => {
-        const code = e.code;
-        if (code === "KeyW" || code === "ArrowUp") input.up = false;
-        else if (code === "KeyS" || code === "ArrowDown") input.down = false;
-        else if (code === "KeyA" || code === "ArrowLeft") input.left = false;
-        else if (code === "KeyD" || code === "ArrowRight") input.right = false;
-        else if (code === "Space") input.attack = false;
+        if (e.code === "KeyW" || e.code === "ArrowUp") input.up = false;
+        else if (e.code === "KeyS" || e.code === "ArrowDown") input.down = false;
+        else if (e.code === "KeyA" || e.code === "ArrowLeft") input.left = false;
+        else if (e.code === "KeyD" || e.code === "ArrowRight") input.right = false;
+        else if (e.code === "Space") input.attack = false;
       });
-
       canvas.addEventListener("mousedown", () => { ensureAudio(); });
-
       resize();
       resetGame();
       requestAnimationFrame(loop);
