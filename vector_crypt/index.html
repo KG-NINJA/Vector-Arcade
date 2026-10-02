@@ -170,14 +170,25 @@
 
   <div id="hud">
     <div class="title">⚔ BLOOD CRYPT ⚔</div>
-    FLOOR <span id="floor">1</span>/3<br />
+    <div id="floorName" style="font-size: 8px; color: #8b7355; margin-bottom: 4px;">THE UPPER PASSAGE</div>
+    DEPTH <span id="floor">1</span>/3<br />
     <div class="hp-bar-container">
       <div class="hp-bar-fill" id="hpBar" style="width: 100%"></div>
       <div class="hp-bar-text"><span id="hp">100</span>/<span id="hpMax">100</span></div>
     </div>
-    <span class="gold">💰 <span id="gold">0</span></span><br />
-    ☠ KILLS <span id="kills">0</span><br />
-    <span id="status">DESCEND...</span>
+    <div style="margin: 4px 0; font-size: 8px; color: #6b8b6b;">
+      ⚔ <span id="weaponName">IRON BLADE</span> +<span id="atkBonus">0</span><br/>
+      🛡 <span id="armorName">CLOTH TUNIC</span> +<span id="defBonus">0</span>
+    </div>
+    <span class="gold">💰 <span id="gold">0</span> COIN</span><br />
+    🗝 KEYS <span id="keys">0</span><br />
+    ☠ SLAIN <span id="kills">0</span><br />
+    <span id="status" style="font-size: 8px;">DESCEND INTO DARKNESS...</span>
+  </div>
+
+  <div id="roomNotify" style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); 
+    font-size: 14px; color: var(--gold); text-shadow: 2px 2px 0 #000, 0 0 20px rgba(201,162,39,0.8);
+    pointer-events: none; opacity: 0; z-index: 150; text-align: center; font-family: 'Press Start 2P', monospace;">
   </div>
 
   <div id="skillbar">
@@ -198,10 +209,12 @@
   <div id="help">
     WASD / ARROWS MOVE<br />
     SPACE MELEE ATTACK<br />
-    Q FIREBALL · E HEAL<br />
+    Q FLAME BOLT · E HEAL<br />
     P PAUSE · R RESTART<br />
-    FIND STAIRS DOWN<br />
-    SLAY THE DEMON LORD
+    ─────────────────<br />
+    SEEK KEYS TO UNLOCK<br />
+    DESCEND THE LABYRINTH<br />
+    DEFEAT THE DARK LORD
   </div>
 
   <div id="minimap">
@@ -214,6 +227,120 @@
     // BLOOD CRYPT - Phaser 3 Dungeon Crawler
     // Diablo 1-inspired with tilemap, lighting, particles
     // =====================================================
+
+    // Coin gate: check if player has valid play time or is in trusted lobby iframe
+    const LOBBY_ORIGIN = "https://kg-ninja.github.io";
+    const LOBBY_URL = "https://kg-ninja.github.io/Vector-Arcade/";
+    const WORKER_BASE = "https://vector-arcade-coins.fuwafuwow.workers.dev";
+    const PLAY_MS = 7 * 60 * 1000;
+
+    // Verify iframe parent is the trusted lobby origin (not just any iframe)
+    function isInTrustedLobby() {
+      if (window.self === window.top) return false;
+      try {
+        // Attempt to access parent origin - will throw if cross-origin
+        const parentOrigin = window.parent.location.origin;
+        return parentOrigin === LOBBY_ORIGIN;
+      } catch (e) {
+        // Cross-origin access denied - check via document.referrer as fallback
+        return document.referrer.startsWith(LOBBY_ORIGIN + "/");
+      }
+    }
+
+    function hasValidPlayTime() {
+      const raw = Number(localStorage.getItem("activePlayUntil") ?? 0);
+      return raw > Date.now();
+    }
+
+    function getRemainingPlayTime() {
+      const raw = Number(localStorage.getItem("activePlayUntil") ?? 0);
+      return Math.max(0, raw - Date.now());
+    }
+
+    function getCoins() {
+      return Number(localStorage.getItem("coins") ?? 0);
+    }
+
+    function showCoinGate() {
+      const container = document.getElementById("game-container");
+      const hasFreeCoin = localStorage.getItem("has_free_coin");
+      const currentCoins = getCoins();
+      
+      // Determine button text and action based on coin state
+      const canUseFreeDemo = !hasFreeCoin;
+      const hasCoinsToSpend = currentCoins > 0;
+      
+      let buttonText, buttonStyle;
+      if (canUseFreeDemo) {
+        buttonText = "TRY FREE DEMO (1 COIN)";
+        buttonStyle = "border: 2px solid var(--gold); color: var(--gold);";
+      } else if (hasCoinsToSpend) {
+        buttonText = `INSERT COIN (${currentCoins} AVAILABLE)`;
+        buttonStyle = "border: 2px solid var(--gold); color: var(--gold);";
+      } else {
+        buttonText = "NO COINS - VISIT LOBBY";
+        buttonStyle = "border: 2px solid var(--text-dim); color: var(--text-dim); opacity: 0.6;";
+      }
+
+      container.innerHTML = `
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; text-align: center; padding: 20px;">
+          <div class="title" style="font-size: 24px; margin-bottom: 30px;">⚔ BLOOD CRYPT ⚔</div>
+          <div style="font-size: 10px; line-height: 2.2; margin-bottom: 30px; max-width: 420px; color: #b8a67a;">
+            <span style="color: #c41e1e; font-size: 12px;">INSERT COIN TO ENTER THE LABYRINTH</span><br><br>
+            Descend through three depths of ancient stone.<br>
+            Collect keys, unlock sealed chambers.<br>
+            Find weapons and armor to grow stronger.<br>
+            Face the Abyssal Lord in the final chamber.<br><br>
+            <span style="color: #8b7355;">1 COIN = 7 MINUTES</span>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 16px;">
+            <a href="${LOBBY_URL}" style="display: inline-block; padding: 12px 24px; border: 2px solid var(--gold); color: var(--gold); text-decoration: none; font-size: 10px;">
+              → ENTER ARCADE LOBBY
+            </a>
+            <button id="insertCoinBtn" style="padding: 12px 24px; background: transparent; font-size: 10px; cursor: pointer; ${buttonStyle}">
+              ${buttonText}
+            </button>
+          </div>
+          <div style="margin-top: 40px; font-size: 8px; color: var(--text-dim); line-height: 2;">
+            Buy coins at the lobby · Supports Stripe checkout<br>
+            AI agents: <a href="${WORKER_BASE}/.well-known/x402" style="color: var(--text-dim);">x402 API</a>
+          </div>
+        </div>
+      `;
+      
+      document.getElementById("insertCoinBtn").addEventListener("click", () => {
+        const hasFreeCoinNow = localStorage.getItem("has_free_coin");
+        let coins = getCoins();
+        
+        // Free demo: grant and immediately use the one-time free coin
+        if (!hasFreeCoinNow) {
+          localStorage.setItem("has_free_coin", "1");
+          // Free demo doesn't add to coin balance - just grants play time
+          localStorage.setItem("activePlayUntil", String(Date.now() + PLAY_MS));
+          location.reload();
+          return;
+        }
+        
+        // Paid coin: deduct from balance
+        if (coins > 0) {
+          coins--;
+          localStorage.setItem("coins", String(coins));
+          localStorage.setItem("activePlayUntil", String(Date.now() + PLAY_MS));
+          location.reload();
+        } else {
+          // No coins - redirect to lobby
+          window.location.href = LOBBY_URL;
+        }
+      });
+    }
+
+    // Gate check: skip if in trusted lobby iframe (which handles coin check) or if play time is valid
+    const isFromTrustedLobby = isInTrustedLobby();
+    const shouldShowGate = !isFromTrustedLobby && !hasValidPlayTime();
+
+    if (shouldShowGate) {
+      document.addEventListener("DOMContentLoaded", showCoinGate);
+    }
 
     const TILE = 48;
     const MAP_W = 40;
@@ -238,6 +365,51 @@
     const BOSS_SPEED = 50;
     const MAX_FLOOR = 3;
 
+    // =====================================================
+    // Retro RPG Flavor: Names and Progression
+    // 80s-90s Japanese PC Action RPG style (original IP)
+    // =====================================================
+    const FLOOR_NAMES = [
+      "THE UPPER PASSAGE",
+      "THE STONE LABYRINTH",
+      "THE ABYSSAL CHAMBER"
+    ];
+
+    const ROOM_NAMES = [
+      "Torch Hall", "Guard Chamber", "Forgotten Shrine", "Moss Corridor",
+      "Crypt Antechamber", "Bone Gallery", "Shadow Alcove", "Rune Chamber",
+      "Collapsed Hall", "Ancient Vault", "Cursed Sanctum", "Iron Gate Room",
+      "Ember Chamber", "Silent Tomb", "Stone Archive", "Dark Passage",
+      "Crimson Hall", "Watcher's Post", "Sealed Chamber", "Hollow Den"
+    ];
+
+    const ENEMY_NAMES = {
+      normal: ["Shadow Fiend", "Crypt Stalker", "Stone Imp", "Dark Hound", "Bone Walker"],
+      boss: "ABYSSAL LORD"
+    };
+
+    const WEAPON_TIERS = [
+      { name: "IRON BLADE", atk: 0 },
+      { name: "STEEL EDGE", atk: 8 },
+      { name: "FLAME SWORD", atk: 15 },
+      { name: "DEMON SLAYER", atk: 25 }
+    ];
+
+    const ARMOR_TIERS = [
+      { name: "CLOTH TUNIC", def: 0 },
+      { name: "LEATHER MAIL", def: 4 },
+      { name: "CHAIN HAUBERK", def: 8 },
+      { name: "PLATE ARMOR", def: 14 }
+    ];
+
+    const ITEM_NAMES = {
+      potion: ["Crimson Elixir", "Healing Draught", "Life Essence"],
+      gold: ["Ancient Coin", "Gold Piece", "Treasure"],
+      key: "Crypt Key",
+      weapon: "Enchanted Blade",
+      armor: "Mystic Mail"
+    };
+
     const PAL = {
       black: 0x0a0806,
       floor1: 0x2a231c, floor2: 0x352c24, floor3: 0x1f1a15, floorAccent: 0x3d3428,
@@ -257,25 +429,48 @@
       floor: 1,
       kills: 0,
       gold: 0,
+      keys: 0,
+      weaponTier: 0,
+      armorTier: 0,
       paused: false,
       gameOver: false,
       victory: false,
-      status: "DESCEND..."
+      status: "DESCEND INTO DARKNESS...",
+      currentRoom: null,
+      roomsDiscovered: 0
     };
 
     // HUD Elements
     const hudFloor = document.getElementById("floor");
+    const hudFloorName = document.getElementById("floorName");
     const hudHp = document.getElementById("hp");
     const hudHpMax = document.getElementById("hpMax");
     const hudHpBar = document.getElementById("hpBar");
     const hudGold = document.getElementById("gold");
+    const hudKeys = document.getElementById("keys");
     const hudKills = document.getElementById("kills");
     const hudStatus = document.getElementById("status");
+    const hudWeaponName = document.getElementById("weaponName");
+    const hudArmorName = document.getElementById("armorName");
+    const hudAtkBonus = document.getElementById("atkBonus");
+    const hudDefBonus = document.getElementById("defBonus");
+    const roomNotify = document.getElementById("roomNotify");
     const skillMeleeEl = document.getElementById("skillMelee");
     const skillQEl = document.getElementById("skillQ");
     const skillEEl = document.getElementById("skillE");
     const minimapCanvas = document.getElementById("minimapCanvas");
     const minimapCtx = minimapCanvas.getContext("2d");
+
+    function showRoomNotify(text, subtext = "") {
+      if (!roomNotify) return;
+      roomNotify.innerHTML = text + (subtext ? `<br><span style="font-size: 9px; color: #8b7355;">${subtext}</span>` : "");
+      roomNotify.style.opacity = "1";
+      roomNotify.style.transition = "none";
+      setTimeout(() => {
+        roomNotify.style.transition = "opacity 1.5s ease";
+        roomNotify.style.opacity = "0";
+      }, 1800);
+    }
 
     // =====================================================
     // Boot Scene - Generate all textures procedurally
@@ -601,9 +796,13 @@
         this.enemies = [];
         this.pickups = [];
         this.projectiles = [];
+        this.doors = [];
         this.CELL_WALL = 0;
         this.CELL_FLOOR = 1;
         this.CELL_STAIRS = 2;
+        this.CELL_DOOR = 3;
+        this.playerLastRoom = -1;
+        this.timeExpired = false;
       }
 
       setupAudio() {
@@ -684,6 +883,9 @@
         this.projectiles = [];
         this.torches.forEach(t => t.sprite?.destroy());
         this.torches = [];
+        this.doors.forEach(d => { d.sprite?.destroy(); d.light?.destroy(); });
+        this.doors = [];
+        this.playerLastRoom = -1;
 
         // Generate map data
         this.map = [];
@@ -692,9 +894,10 @@
           for (let x = 0; x < MAP_W; x++) this.map[y][x] = this.CELL_WALL;
         }
 
-        // Generate rooms
+        // Generate rooms with names (80s-90s JP RPG style)
         this.rooms = [];
         const roomCount = 6 + floor * 2;
+        const usedNames = new Set();
         for (let i = 0; i < roomCount * 3; i++) {
           if (this.rooms.length >= roomCount) break;
           const rw = Phaser.Math.Between(5, 8);
@@ -709,7 +912,21 @@
             }
           }
           if (overlap) continue;
-          this.rooms.push({ x: rx, y: ry, w: rw, h: rh });
+          
+          // Assign unique room name
+          let roomName;
+          const roomIdx = this.rooms.length;
+          if (roomIdx === 0) {
+            roomName = "Entrance Hall";
+          } else {
+            const available = ROOM_NAMES.filter(n => !usedNames.has(n));
+            roomName = available.length > 0 
+              ? available[Phaser.Math.Between(0, available.length - 1)]
+              : `Chamber ${roomIdx + 1}`;
+          }
+          usedNames.add(roomName);
+          
+          this.rooms.push({ x: rx, y: ry, w: rw, h: rh, name: roomName, discovered: false });
           for (let dy = 0; dy < rh; dy++) {
             for (let dx = 0; dx < rw; dx++) {
               this.map[ry + dy][rx + dx] = this.CELL_FLOOR;
@@ -717,15 +934,18 @@
           }
         }
 
-        // Connect rooms with corridors
+        // Connect rooms with corridors - add locked doors on some connections
+        const doorPositions = [];
         for (let i = 1; i < this.rooms.length; i++) {
           const r1 = this.rooms[i - 1], r2 = this.rooms[i];
           let cx = Math.floor(r1.x + r1.w / 2), cy = Math.floor(r1.y + r1.h / 2);
           const tx = Math.floor(r2.x + r2.w / 2), ty = Math.floor(r2.y + r2.h / 2);
+          const corridorCells = [];
           while (cx !== tx) {
             if (cx >= 0 && cx < MAP_W && cy >= 0 && cy < MAP_H) {
               this.map[cy][cx] = this.CELL_FLOOR;
               if (cy > 0) this.map[cy - 1][cx] = this.CELL_FLOOR;
+              corridorCells.push({ x: cx, y: cy });
             }
             cx += cx < tx ? 1 : -1;
           }
@@ -733,8 +953,16 @@
             if (cx >= 0 && cx < MAP_W && cy >= 0 && cy < MAP_H) {
               this.map[cy][cx] = this.CELL_FLOOR;
               if (cx > 0) this.map[cy][cx - 1] = this.CELL_FLOOR;
+              corridorCells.push({ x: cx, y: cy });
             }
             cy += cy < ty ? 1 : -1;
+          }
+          // Place locked door on some corridors (not first connection, not to boss room on floor 3)
+          const isBossConnection = floor >= MAX_FLOOR && i === this.rooms.length - 1;
+          if (i > 1 && corridorCells.length > 4 && Math.random() < 0.4 && !isBossConnection) {
+            const mid = Math.floor(corridorCells.length / 2);
+            const doorCell = corridorCells[mid];
+            doorPositions.push({ x: doorCell.x, y: doorCell.y, connectsRoom: i });
           }
         }
 
@@ -786,17 +1014,68 @@
           }
         }
 
+        // Place locked doors
+        for (const dp of doorPositions) {
+          this.map[dp.y][dp.x] = this.CELL_DOOR;
+          this.createDoor(dp.x * TILE + TILE / 2, dp.y * TILE + TILE / 2, dp.connectsRoom);
+        }
+
         // Spawn enemies
         this.spawnEnemies(floor, floor >= MAX_FLOOR);
 
-        // Spawn pickups
-        this.spawnPickups();
+        // Spawn pickups (including keys for doors)
+        this.spawnPickups(doorPositions.length);
+
+        // Spawn equipment on floors 2+
+        if (floor >= 2) {
+          this.spawnEquipment(floor);
+        }
 
         // Update state
         gameState.floor = floor;
-        gameState.status = floor >= MAX_FLOOR ? "DEMON LORD AWAITS" : "FIND THE STAIRS";
+        const floorName = FLOOR_NAMES[floor - 1] || `DEPTH ${floor}`;
+        gameState.status = floor >= MAX_FLOOR ? "THE DARK LORD AWAITS..." : "SEEK THE DESCENDING STAIR";
+        
+        // Show floor entry notification
+        showRoomNotify(floorName, floor >= MAX_FLOOR ? "Final Depth" : `Depth ${floor} of ${MAX_FLOOR}`);
+        
         this.updateHUD();
         this.updateMinimap();
+      }
+
+      createDoor(x, y, connectsRoom) {
+        const sprite = this.add.rectangle(x, y, TILE - 8, TILE - 8, 0x5c4530).setDepth(4);
+        sprite.setStrokeStyle(4, 0x8b7355);
+        
+        // Lock icon
+        const lockIcon = this.add.text(x, y, "🔒", {
+          fontSize: '16px'
+        }).setOrigin(0.5).setDepth(5);
+        
+        const door = { sprite, lockIcon, x, y, tileX: Math.floor(x / TILE), tileY: Math.floor(y / TILE), locked: true, connectsRoom };
+        this.doors.push(door);
+      }
+
+      unlockDoor(door) {
+        if (!door.locked) return;
+        door.locked = false;
+        this.map[door.tileY][door.tileX] = this.CELL_FLOOR;
+        
+        // Animate door opening
+        this.tweens.add({
+          targets: [door.sprite, door.lockIcon],
+          alpha: 0,
+          scaleX: 0.1,
+          duration: 400,
+          onComplete: () => {
+            door.sprite.destroy();
+            door.lockIcon.destroy();
+          }
+        });
+        
+        // Sound effect
+        this.sfxPickup();
+        this.showDamageText(door.x, door.y - 20, "UNLOCKED", 0xc9a227);
       }
 
       addTorch(x, y) {
@@ -840,6 +1119,11 @@
         const sprite = this.add.sprite(x, y, texKey).setDepth(10);
         if (isBoss) sprite.setScale(1.2);
 
+        // Assign original enemy name (80s-90s JP RPG style)
+        const enemyName = isBoss 
+          ? ENEMY_NAMES.boss 
+          : ENEMY_NAMES.normal[Phaser.Math.Between(0, ENEMY_NAMES.normal.length - 1)];
+
         const enemy = {
           sprite,
           x, y,
@@ -850,7 +1134,8 @@
           attackCd: 0,
           isBoss,
           frame: 0,
-          animTime: 0
+          animTime: 0,
+          name: enemyName
         };
 
         // Health bar
@@ -860,7 +1145,7 @@
         enemy.hpBarFill.x = x - (isBoss ? 30 : 16);
 
         if (isBoss) {
-          enemy.nameText = this.add.text(x, y - 65, 'DEMON LORD', {
+          enemy.nameText = this.add.text(x, y - 65, ENEMY_NAMES.boss, {
             fontSize: '10px',
             fontFamily: 'Press Start 2P',
             color: '#c41e1e'
@@ -870,7 +1155,21 @@
         this.enemies.push(enemy);
       }
 
-      spawnPickups() {
+      spawnPickups(keyCount = 0) {
+        // Spawn keys for locked doors (place in earlier rooms)
+        let keysPlaced = 0;
+        const keyRooms = this.rooms.slice(1, Math.max(2, this.rooms.length - 2));
+        Phaser.Utils.Array.Shuffle(keyRooms);
+        
+        for (let i = 0; i < keyCount && i < keyRooms.length; i++) {
+          const room = keyRooms[i];
+          const px = (room.x + Phaser.Math.Between(1, room.w - 2)) * TILE + TILE / 2;
+          const py = (room.y + Phaser.Math.Between(1, room.h - 2)) * TILE + TILE / 2;
+          this.createPickup(px, py, 'key', 1);
+          keysPlaced++;
+        }
+
+        // Regular pickups
         for (let i = 1; i < this.rooms.length; i++) {
           const room = this.rooms[i];
           if (Math.random() < 0.65) {
@@ -883,9 +1182,60 @@
         }
       }
 
+      spawnEquipment(floor) {
+        // Spawn weapon upgrade on floor 2, armor on floor 3
+        const midRooms = this.rooms.slice(2, -1);
+        if (midRooms.length === 0) return;
+        
+        const weaponRoom = midRooms[Phaser.Math.Between(0, midRooms.length - 1)];
+        const px = (weaponRoom.x + weaponRoom.w / 2) * TILE;
+        const py = (weaponRoom.y + weaponRoom.h / 2) * TILE;
+        
+        if (floor === 2) {
+          this.createPickup(px, py, 'weapon', 1);
+        } else if (floor >= 3 && midRooms.length > 1) {
+          this.createPickup(px, py, 'weapon', 2);
+          const armorRoom = midRooms.find(r => r !== weaponRoom) || midRooms[0];
+          const ax = (armorRoom.x + armorRoom.w / 2) * TILE;
+          const ay = (armorRoom.y + armorRoom.h / 2) * TILE;
+          this.createPickup(ax, ay, 'armor', 1);
+        }
+      }
+
       createPickup(x, y, type, value) {
-        const texKey = type === 'hp' ? 'potion' : 'gold';
+        let texKey, tint = null;
+        if (type === 'hp') {
+          texKey = 'potion';
+        } else if (type === 'gold') {
+          texKey = 'gold';
+        } else if (type === 'key') {
+          texKey = 'gold';
+          tint = 0xc9c9c9;
+        } else if (type === 'weapon') {
+          texKey = 'torch';
+          tint = 0x6688ff;
+        } else if (type === 'armor') {
+          texKey = 'torch';
+          tint = 0x88ff66;
+        } else {
+          texKey = 'gold';
+        }
+        
         const sprite = this.add.image(x, y, texKey).setDepth(5);
+        if (tint) sprite.setTint(tint);
+        
+        // Keys and equipment get extra glow
+        if (type === 'key' || type === 'weapon' || type === 'armor') {
+          const glow = this.add.pointlight(x, y, type === 'key' ? 0xffffcc : (type === 'weapon' ? 0x6688ff : 0x88ff66), 60, 0.5);
+          glow.attenuation = 0.08;
+          this.tweens.add({
+            targets: glow,
+            intensity: { from: 0.4, to: 0.7 },
+            duration: 600,
+            yoyo: true,
+            repeat: -1
+          });
+        }
         
         this.tweens.add({
           targets: sprite,
@@ -896,7 +1246,21 @@
           ease: 'Sine.easeInOut'
         });
 
-        this.pickups.push({ sprite, x, y, type, value });
+        // Assign item name for display
+        let itemName = "";
+        if (type === 'hp') {
+          itemName = ITEM_NAMES.potion[Phaser.Math.Between(0, ITEM_NAMES.potion.length - 1)];
+        } else if (type === 'gold') {
+          itemName = ITEM_NAMES.gold[Phaser.Math.Between(0, ITEM_NAMES.gold.length - 1)];
+        } else if (type === 'key') {
+          itemName = ITEM_NAMES.key;
+        } else if (type === 'weapon') {
+          itemName = ITEM_NAMES.weapon;
+        } else if (type === 'armor') {
+          itemName = ITEM_NAMES.armor;
+        }
+
+        this.pickups.push({ sprite, x, y, type, value, name: itemName });
       }
 
       setupPlayer() {
@@ -1051,6 +1415,16 @@
           return;
         }
 
+        // Check play time expiry (7-minute limit enforcement)
+        if (!isFromTrustedLobby && !this.timeExpired) {
+          const remaining = getRemainingPlayTime();
+          if (remaining <= 0) {
+            this.timeExpired = true;
+            this.showTimeExpiredOverlay();
+            return;
+          }
+        }
+
         this.updatePlayer(delta);
         this.updateEnemies(delta);
         this.updateProjectiles(delta);
@@ -1143,8 +1517,59 @@
         // Check stairs
         this.checkStairs();
 
+        // Check doors
+        this.checkDoors();
+
+        // Check room entry for notifications
+        this.checkRoomEntry();
+
         // Update HUD
         this.updateHUD();
+      }
+
+      checkDoors() {
+        const p = this.player;
+        for (const door of this.doors) {
+          if (!door.locked) continue;
+          const dist = Phaser.Math.Distance.Between(p.x, p.y, door.x, door.y);
+          if (dist < 50) {
+            if (gameState.keys > 0) {
+              gameState.keys--;
+              this.unlockDoor(door);
+            } else {
+              // Show hint
+              if (!door.hintShown) {
+                this.showDamageText(door.x, door.y - 30, "NEED KEY", 0xff6644);
+                door.hintShown = true;
+                this.time.delayedCall(2000, () => { door.hintShown = false; });
+              }
+            }
+          }
+        }
+      }
+
+      checkRoomEntry() {
+        const p = this.player;
+        const px = Math.floor(p.x / TILE);
+        const py = Math.floor(p.y / TILE);
+        
+        for (let i = 0; i < this.rooms.length; i++) {
+          const room = this.rooms[i];
+          if (px >= room.x && px < room.x + room.w && py >= room.y && py < room.y + room.h) {
+            if (this.playerLastRoom !== i) {
+              this.playerLastRoom = i;
+              if (!room.discovered) {
+                room.discovered = true;
+                gameState.roomsDiscovered++;
+                if (i > 0) {
+                  showRoomNotify(room.name, i === this.rooms.length - 1 && gameState.floor < MAX_FLOOR ? "Stairs ahead..." : "");
+                }
+              }
+              gameState.currentRoom = room.name;
+            }
+            return;
+          }
+        }
       }
 
       playerMeleeAttack() {
@@ -1172,12 +1597,14 @@
           onComplete: () => slash.destroy()
         });
 
-        // Hit enemies
+        // Hit enemies (with weapon bonus)
+        const weaponBonus = WEAPON_TIERS[gameState.weaponTier].atk;
+        const totalAtk = PLAYER_ATK + weaponBonus;
         for (const e of this.enemies) {
           if (e.hp <= 0) continue;
           const dist = Phaser.Math.Distance.Between(p.x, p.y, e.x, e.y);
           if (dist <= PLAYER_ATK_RANGE) {
-            this.damageEnemy(e, PLAYER_ATK);
+            this.damageEnemy(e, totalAtk);
           }
         }
 
@@ -1195,13 +1622,14 @@
         this.sfxFireball();
 
         const sprite = this.add.sprite(p.x, p.y, 'fireball_0').setDepth(11);
+        const weaponBonus = WEAPON_TIERS[gameState.weaponTier].atk;
         const proj = {
           sprite,
           x: p.x,
           y: p.y,
           vx: p.facing.x * FIREBALL_SPEED,
           vy: p.facing.y * FIREBALL_SPEED,
-          dmg: FIREBALL_DMG,
+          dmg: FIREBALL_DMG + Math.floor(weaponBonus / 2),
           ttl: 2000,
           frame: 0,
           animTime: 0
@@ -1300,7 +1728,9 @@
 
       damagePlayer(dmg) {
         const p = this.player;
-        p.hp -= dmg;
+        const armorDef = ARMOR_TIERS[gameState.armorTier].def;
+        const actualDmg = Math.max(1, dmg - armorDef);
+        p.hp -= actualDmg;
         this.sfxHit();
 
         // Blood particles
@@ -1446,10 +1876,31 @@
             if (pk.type === 'gold') {
               gameState.gold += pk.value;
               this.showDamageText(pk.x, pk.y - 10, '+' + pk.value, 0xc9a227);
-            } else {
+            } else if (pk.type === 'hp') {
               const heal = Math.min(pk.value, p.maxHp - p.hp);
               p.hp += heal;
               this.showDamageText(pk.x, pk.y - 10, '+' + heal, 0x44ff44);
+              showRoomNotify(pk.name, `HP +${heal}`);
+            } else if (pk.type === 'key') {
+              gameState.keys++;
+              this.showDamageText(pk.x, pk.y - 10, 'KEY +1', 0xc9c9c9);
+              showRoomNotify(pk.name, "A door awaits...");
+            } else if (pk.type === 'weapon') {
+              const nextTier = Math.min(gameState.weaponTier + pk.value, WEAPON_TIERS.length - 1);
+              if (nextTier > gameState.weaponTier) {
+                gameState.weaponTier = nextTier;
+                const weapon = WEAPON_TIERS[nextTier];
+                this.showDamageText(pk.x, pk.y - 10, 'ATK +' + weapon.atk, 0x6688ff);
+                showRoomNotify(weapon.name, `Attack +${weapon.atk}`);
+              }
+            } else if (pk.type === 'armor') {
+              const nextTier = Math.min(gameState.armorTier + pk.value, ARMOR_TIERS.length - 1);
+              if (nextTier > gameState.armorTier) {
+                gameState.armorTier = nextTier;
+                const armor = ARMOR_TIERS[nextTier];
+                this.showDamageText(pk.x, pk.y - 10, 'DEF +' + armor.def, 0x88ff66);
+                showRoomNotify(armor.name, `Defense +${armor.def}`);
+              }
             }
             this.sfxPickup();
             pk.sprite.destroy();
@@ -1486,7 +1937,8 @@
           { x: x + radius, y: y + radius }
         ];
         for (const c of checks) {
-          if (this.tileAt(c.x, c.y) === this.CELL_WALL) return false;
+          const cell = this.tileAt(c.x, c.y);
+          if (cell === this.CELL_WALL || cell === this.CELL_DOOR) return false;
         }
         return true;
       }
@@ -1503,13 +1955,25 @@
         if (!p) return;
 
         hudFloor.textContent = gameState.floor;
+        if (hudFloorName) {
+          hudFloorName.textContent = FLOOR_NAMES[gameState.floor - 1] || `DEPTH ${gameState.floor}`;
+        }
         hudHp.textContent = Math.max(0, Math.floor(p.hp));
         hudHpMax.textContent = p.maxHp;
         hudHpBar.style.width = Math.max(0, (p.hp / p.maxHp) * 100) + '%';
         hudGold.textContent = gameState.gold;
+        if (hudKeys) hudKeys.textContent = gameState.keys;
         hudKills.textContent = gameState.kills;
         hudStatus.textContent = gameState.status;
         hudStatus.className = gameState.gameOver && !gameState.victory ? 'warn' : '';
+
+        // Equipment display
+        const weapon = WEAPON_TIERS[gameState.weaponTier];
+        const armor = ARMOR_TIERS[gameState.armorTier];
+        if (hudWeaponName) hudWeaponName.textContent = weapon.name;
+        if (hudArmorName) hudArmorName.textContent = armor.name;
+        if (hudAtkBonus) hudAtkBonus.textContent = weapon.atk;
+        if (hudDefBonus) hudDefBonus.textContent = armor.def;
 
         // Skill cooldowns
         this.updateSkillEl(skillMeleeEl, p.attackCd, PLAYER_ATK_CD);
@@ -1555,7 +2019,20 @@
             } else if (cell === this.CELL_STAIRS) {
               minimapCtx.fillStyle = '#8b7355';
               minimapCtx.fillRect(x * scale, y * scale, scale, scale);
+            } else if (cell === this.CELL_DOOR) {
+              minimapCtx.fillStyle = '#5c4530';
+              minimapCtx.fillRect(x * scale, y * scale, scale, scale);
             }
+          }
+        }
+
+        // Draw pickups (keys shown as special)
+        minimapCtx.fillStyle = '#c9c9c9';
+        for (const pk of this.pickups) {
+          if (pk.type === 'key') {
+            const kx = Math.floor(pk.x / TILE) * scale;
+            const ky = Math.floor(pk.y / TILE) * scale;
+            minimapCtx.fillRect(kx, ky, scale, scale);
           }
         }
 
@@ -1589,20 +2066,23 @@
         this.overlayBg = this.add.rectangle(cx, cy, w, h, 0x000000, 0.85).setDepth(200);
 
         if (gameState.gameOver) {
-          const title = gameState.victory ? 'VICTORY' : 'YOU DIED';
+          const title = gameState.victory ? 'LABYRINTH CLEARED' : 'FALLEN IN DARKNESS';
           const color = gameState.victory ? '#c9a227' : '#c41e1e';
-          this.overlayText = this.add.text(cx, cy - 40, title, {
-            fontSize: '32px',
+          this.overlayText = this.add.text(cx, cy - 50, title, {
+            fontSize: '24px',
             fontFamily: 'Press Start 2P',
             color: color
           }).setOrigin(0.5).setDepth(201);
 
-          const stats = `FLOOR ${gameState.floor}  KILLS ${gameState.kills}  GOLD ${gameState.gold}`;
-          this.overlaySubtext = this.add.text(cx, cy + 20, stats + '\n\nPRESS R TO RESTART', {
-            fontSize: '10px',
+          const floorName = FLOOR_NAMES[gameState.floor - 1] || `DEPTH ${gameState.floor}`;
+          const weapon = WEAPON_TIERS[gameState.weaponTier].name;
+          const stats = `${floorName}\n\nSLAIN: ${gameState.kills}  GOLD: ${gameState.gold}\nWEAPON: ${weapon}\n\nPRESS R TO RESTART`;
+          this.overlaySubtext = this.add.text(cx, cy + 30, stats, {
+            fontSize: '8px',
             fontFamily: 'Press Start 2P',
             color: '#b8a67a',
-            align: 'center'
+            align: 'center',
+            lineSpacing: 8
           }).setOrigin(0.5).setDepth(201);
         } else {
           this.overlayText = this.add.text(cx, cy, 'PAUSED', {
@@ -1625,16 +2105,65 @@
         if (this.overlaySubtext) this.overlaySubtext.destroy();
       }
 
+      showTimeExpiredOverlay() {
+        gameState.paused = true;
+        
+        if (this.overlayBg) this.overlayBg.destroy();
+        if (this.overlayText) this.overlayText.destroy();
+        if (this.overlaySubtext) this.overlaySubtext.destroy();
+
+        const w = this.cameras.main.width;
+        const h = this.cameras.main.height;
+        const cx = this.cameras.main.scrollX + w / 2;
+        const cy = this.cameras.main.scrollY + h / 2;
+
+        this.overlayBg = this.add.rectangle(cx, cy, w, h, 0x000000, 0.95).setDepth(200);
+
+        this.overlayText = this.add.text(cx, cy - 40, 'TIME EXPIRED', {
+          fontSize: '24px',
+          fontFamily: 'Press Start 2P',
+          color: '#ff6644'
+        }).setOrigin(0.5).setDepth(201);
+
+        const floorName = FLOOR_NAMES[gameState.floor - 1] || `DEPTH ${gameState.floor}`;
+        const stats = `${floorName}\nSLAIN: ${gameState.kills}  GOLD: ${gameState.gold}\n\nINSERT COIN TO CONTINUE`;
+        this.overlaySubtext = this.add.text(cx, cy + 30, stats, {
+          fontSize: '8px',
+          fontFamily: 'Press Start 2P',
+          color: '#b8a67a',
+          align: 'center',
+          lineSpacing: 8
+        }).setOrigin(0.5).setDepth(201);
+
+        // Add button to return to coin gate
+        const btnText = this.add.text(cx, cy + 100, '[ CLICK TO INSERT COIN ]', {
+          fontSize: '10px',
+          fontFamily: 'Press Start 2P',
+          color: '#c9a227'
+        }).setOrigin(0.5).setDepth(201).setInteractive({ useHandCursor: true });
+
+        btnText.on('pointerdown', () => {
+          // Clear play time and reload to show coin gate
+          localStorage.removeItem('activePlayUntil');
+          location.reload();
+        });
+      }
+
       restartGame() {
         this.hideOverlay();
         gameState = {
           floor: 1,
           kills: 0,
           gold: 0,
+          keys: 0,
+          weaponTier: 0,
+          armorTier: 0,
           paused: false,
           gameOver: false,
           victory: false,
-          status: "DESCEND..."
+          status: "DESCEND INTO DARKNESS...",
+          currentRoom: null,
+          roomsDiscovered: 0
         };
 
         // Reset player
@@ -1656,26 +2185,29 @@
     // =====================================================
     // Phaser Game Configuration
     // =====================================================
-    const config = {
-      type: Phaser.AUTO,
-      parent: 'game-container',
-      width: window.innerWidth,
-      height: window.innerHeight,
-      pixelArt: true,
-      backgroundColor: '#0a0806',
-      scale: {
-        mode: Phaser.Scale.RESIZE,
-        autoCenter: Phaser.Scale.CENTER_BOTH
-      },
-      scene: [BootScene, GameScene]
-    };
+    // Only initialize Phaser if gate is passed
+    if (!shouldShowGate) {
+      const config = {
+        type: Phaser.AUTO,
+        parent: 'game-container',
+        width: window.innerWidth,
+        height: window.innerHeight,
+        pixelArt: true,
+        backgroundColor: '#0a0806',
+        scale: {
+          mode: Phaser.Scale.RESIZE,
+          autoCenter: Phaser.Scale.CENTER_BOTH
+        },
+        scene: [BootScene, GameScene]
+      };
 
-    const game = new Phaser.Game(config);
+      const game = new Phaser.Game(config);
 
-    // Handle window resize
-    window.addEventListener('resize', () => {
-      game.scale.resize(window.innerWidth, window.innerHeight);
-    });
+      // Handle window resize
+      window.addEventListener('resize', () => {
+        game.scale.resize(window.innerWidth, window.innerHeight);
+      });
+    }
   </script>
 </body>
 </html>

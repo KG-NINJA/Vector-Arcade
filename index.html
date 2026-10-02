@@ -286,11 +286,13 @@
     Insert Coin · One Coin = 7 Minutes · No Prizes. Just Play. ·
     <span id="cabinetHint">ARROW KEYS TO BROWSE · ENTER TO PLAY</span> ·
     <span id="cabinetCounter">CABINET 1/1</span> ·
+    <span id="workerStatus" style="color: #0a2;">[CHECKING]</span> ·
     <a href="tokusho.html">特定商取引法に基づく表記</a> /
     <a href="tokusho-en.html">Legal Notice</a> ·
     <a href="privacy.html">プライバシーポリシー</a> /
     <a href="privacy-en.html">Privacy Policy</a> ·
-    <a href="https://vector-arcade-coins.fuwafuwow.workers.dev/.well-known/x402">Agent API (x402)</a> ·
+    <a href="https://vector-arcade-coins.fuwafuwow.workers.dev/.well-known/x402" id="agentApiLink">Agent API (x402)</a> ·
+    <a href="llms.txt">llms.txt</a> ·
     <a href="https://twitter.com/intent/tweet?text=%23KGNINJA%20%23VectorArcade%20https%3A%2F%2Fkg-ninja.github.io%2FVector-Arcade%2F"
       target="_blank" rel="noopener noreferrer">
       Post on X: #KGNINJA #VectorArcade
@@ -353,21 +355,78 @@
 
     const storedCoins = localStorage.getItem("coins");
     const hasFreeCoin = localStorage.getItem("has_free_coin");
-    let coins = storedCoins === null ? 1 : Number(storedCoins);
-    if (!hasFreeCoin && coins <= 0) {
-      coins = 1;
+    let coins = storedCoins === null ? 0 : Number(storedCoins);
+    // Grant one free demo coin per browser (tracked separately from purchased balance)
+    if (!hasFreeCoin) {
+      coins += 1;
       localStorage.setItem("has_free_coin", "1");
+      localStorage.setItem("coins", String(coins));
     }
     const coinEl = document.getElementById("coinCount");
     const timeEl = document.getElementById("timeLeft");
     const WARNING_MS = 2 * 60 * 1000;
     const PLAY_MS = 7 * 60 * 1000;
-    const DEMO_MODE = false;
     // Cloudflare Worker base URL for checkout and coin redemption.
     const WORKER_BASE = "https://vector-arcade-coins.fuwafuwow.workers.dev";
     const buyBtn = document.getElementById("buyCoins");
     const redeemStatus = document.getElementById("redeemStatus");
     const cabinetCounterEl = document.getElementById("cabinetCounter");
+
+    // Worker availability state - enables graceful degradation when Worker is down
+    let workerAvailable = false;
+    let workerCheckInProgress = false;
+
+    async function checkWorkerHealth() {
+      if (workerCheckInProgress) return workerAvailable;
+      workerCheckInProgress = true;
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 5000);
+        // Use /ready endpoint which checks Stripe configuration, not just Worker reachability
+        const res = await fetch(`${WORKER_BASE}/ready`, {
+          method: "GET",
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
+        if (res.ok) {
+          const data = await res.json();
+          // Worker is available only if Stripe checkout is fully configured
+          workerAvailable = data.ready === true && data.checkout === true;
+        } else {
+          workerAvailable = false;
+        }
+      } catch (e) {
+        workerAvailable = false;
+      }
+      workerCheckInProgress = false;
+      updateWorkerUI();
+      return workerAvailable;
+    }
+
+    function updateWorkerUI() {
+      const statusEl = document.getElementById("workerStatus");
+      if (workerAvailable) {
+        buyBtn.disabled = false;
+        buyBtn.textContent = "BUY COINS";
+        buyBtn.title = "Purchase coins via Stripe checkout";
+        if (statusEl) {
+          statusEl.textContent = "[ONLINE]";
+          statusEl.style.color = "#00ff66";
+        }
+      } else {
+        buyBtn.disabled = true;
+        buyBtn.textContent = "OFFLINE";
+        buyBtn.title = "Payment system offline - demo mode active";
+        if (statusEl) {
+          statusEl.textContent = "[OFFLINE]";
+          statusEl.style.color = "#ff4d4d";
+        }
+      }
+    }
+
+    // Check Worker health on load and periodically
+    checkWorkerHealth();
+    setInterval(checkWorkerHealth, 60000);
 
     function updateCoins() {
       coinEl.textContent = coins;
@@ -396,18 +455,30 @@
     }
 
     async function buyCoins() {
+      if (!workerAvailable) {
+        showModal("PAYMENT SYSTEM OFFLINE<br><br>Demo mode: 1 free coin granted on first visit.<br>Coins refresh on browser reload.");
+        return;
+      }
       try {
         buyBtn.disabled = true;
         if (redeemStatus) redeemStatus.textContent = "Opening checkout...";
-        const res = await fetch(`${WORKER_BASE}/checkout`, { method: "POST" });
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 15000);
+        const res = await fetch(`${WORKER_BASE}/checkout`, {
+          method: "POST",
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
         const data = await res.json();
         if (!data?.ok || !data?.url) throw new Error(data?.error || "checkout failed");
         window.location.href = data.url;
       } catch (e) {
         console.log("Checkout failed:", e);
-        showModal("CHECKOUT ERROR");
+        workerAvailable = false;
+        updateWorkerUI();
+        showModal("CHECKOUT UNAVAILABLE<br><br>Payment system may be offline.<br>Try again later.");
       } finally {
-        buyBtn.disabled = false;
+        buyBtn.disabled = workerAvailable ? false : true;
         if (redeemStatus) redeemStatus.textContent = "";
       }
     }
@@ -421,13 +492,12 @@
       if (raw > now) {
         return true;
       }
-      if (DEMO_MODE) {
-        localStorage.setItem("activePlayUntil", String(now + PLAY_MS));
-        updateTimer();
-        return true;
-      }
       if (coins <= 0) {
-        showModal("NO COINS");
+        if (!workerAvailable) {
+          showModal("NO COINS<br><br>Payment system offline.<br>Reload page for 1 demo coin.");
+        } else {
+          showModal("NO COINS<br><br>Click BUY COINS to purchase more.");
+        }
         return false;
       }
       coins--;
@@ -441,15 +511,20 @@
     async function redeemSession(sessionId) {
       try {
         if (redeemStatus) redeemStatus.textContent = "Redeeming...";
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 15000);
         const res = await fetch(`${WORKER_BASE}/redeem`, {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ session_id: sessionId }),
+          signal: controller.signal,
         });
+        clearTimeout(timeout);
         const data = await res.json();
         if (!data?.ok) {
           console.log("Redeem rejected:", data);
           if (redeemStatus) redeemStatus.textContent = "";
+          showModal("REDEEM FAILED<br><br>Session may have expired or already been used.");
           return;
         }
         const add = Number(data.coins || 0);
@@ -457,9 +532,15 @@
         updateCoins();
         if (redeemStatus) redeemStatus.textContent = "";
         showModal(`COINS +${add}`);
+        // Worker is confirmed available
+        workerAvailable = true;
+        updateWorkerUI();
       } catch (e) {
         console.log("Redeem failed:", e);
         if (redeemStatus) redeemStatus.textContent = "";
+        workerAvailable = false;
+        updateWorkerUI();
+        showModal("REDEEM UNAVAILABLE<br><br>Payment system may be offline.<br>Your purchase is saved - try reloading later.");
       }
     }
 
@@ -479,6 +560,9 @@
     }
 
     buyBtn?.addEventListener("click", buyCoins);
+
+    // Handle return from Stripe checkout - must run on page load
+    handleReturnFromStripe();
 
     const arcade = document.getElementById("arcade");
 
