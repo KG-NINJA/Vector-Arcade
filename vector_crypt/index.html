@@ -163,10 +163,104 @@
     #minimap canvas {
       width: 100%; height: 100%;
     }
+
+    #hud.shake { animation: hudShake 0.18s linear; }
+    @keyframes hudShake {
+      0%, 100% { transform: translate(0, 0); }
+      25% { transform: translate(-4px, 1px); }
+      50% { transform: translate(4px, -2px); }
+      75% { transform: translate(-2px, 2px); }
+    }
+    .hp-bar-fill.critical {
+      animation: hpPulse 0.65s ease-in-out infinite;
+    }
+    @keyframes hpPulse {
+      0%, 100% { filter: brightness(1); }
+      50% { filter: brightness(1.7); }
+    }
+
+    #screen-fx {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 40;
+      overflow: hidden;
+    }
+    #fx-vignette {
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse at center, transparent 36%, rgba(0,0,0,0.28) 62%, rgba(0,0,0,0.78) 100%);
+    }
+    #fx-grain {
+      position: absolute;
+      inset: -10%;
+      opacity: 0.09;
+      mix-blend-mode: overlay;
+      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/></filter><rect width='100%' height='100%' filter='url(%23n)' opacity='0.7'/></svg>");
+      animation: grainShift 0.32s steps(2) infinite;
+    }
+    @keyframes grainShift {
+      from { transform: translate(0, 0); }
+      to { transform: translate(-12px, 8px); }
+    }
+    #fx-blood {
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(ellipse at center, transparent 28%, rgba(90,0,0,0.0) 46%, rgba(110,0,0,0.72) 100%);
+      opacity: 0;
+    }
+    #fx-flash {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      background: transparent;
+    }
+    #fx-impact {
+      position: absolute;
+      inset: -25%;
+      opacity: 0;
+      mix-blend-mode: screen;
+      background: repeating-conic-gradient(from 0deg, transparent 0 7deg, rgba(255,214,160,0.28) 7deg 8deg);
+    }
+    #fx-impact.go { animation: impactFade 0.42s ease-out; }
+    @keyframes impactFade {
+      0% { opacity: 0.85; transform: scale(0.82); }
+      100% { opacity: 0; transform: scale(1.08); }
+    }
+    #fx-banner {
+      position: absolute;
+      left: 50%;
+      top: 34%;
+      transform: translate(-50%, -50%) scale(0.7);
+      opacity: 0;
+      color: #e6d3a1;
+      font-size: 22px;
+      letter-spacing: 3px;
+      text-shadow: 3px 3px 0 #000, 0 0 16px rgba(0,0,0,0.9);
+      white-space: nowrap;
+    }
+    #fx-banner.gold { color: #c9a227; text-shadow: 3px 3px 0 #000, 0 0 18px rgba(201,162,39,0.85); }
+    #fx-banner.danger { color: #e23b3b; text-shadow: 3px 3px 0 #000, 0 0 18px rgba(180,0,0,0.85); }
+    #fx-banner.show { animation: bannerIn 1.15s ease-out forwards; }
+    @keyframes bannerIn {
+      0% { opacity: 0; transform: translate(-50%, -30%) scale(1.45); }
+      16% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+      72% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+      100% { opacity: 0; transform: translate(-50%, -64%) scale(0.96); }
+    }
   </style>
 </head>
 <body>
   <div id="game-container"></div>
+  <div id="screen-fx" aria-hidden="true">
+    <div id="fx-vignette"></div>
+    <div id="fx-grain"></div>
+    <div id="fx-blood"></div>
+    <div id="fx-flash"></div>
+    <div id="fx-impact"></div>
+    <div id="fx-banner"></div>
+  </div>
 
   <div id="hud">
     <div class="title">⚔ BLOOD CRYPT ⚔</div>
@@ -592,6 +686,9 @@
         this.setupParticles();
         this.setupCamera();
         this.setupAudio();
+        this.setupScreenFX();
+        this.cameras.main.fadeIn(520, 0, 0, 0);
+        this.showBanner('BLOOD CRYPT');
       }
 
       setupState() {
@@ -954,51 +1051,130 @@
         this.input.on('pointerdown', () => this.ensureAudio());
         this.input.keyboard.on('keydown', () => this.ensureAudio());
 
-        // Direct DOM listener for pause/restart (works during game over/pause)
+        // Pause/restart stay on the DOM so they work during hitstop and game over.
         const scene = this;
         window.addEventListener('keydown', (e) => {
+          if (e.repeat) return;
           if (e.code === 'KeyR') {
             scene.restartGame();
-          } else if (e.code === 'KeyP' && !gameState.gameOver) {
+          } else if (e.code === 'KeyP' && !gameState.gameOver && !scene.transitioning) {
             gameState.paused = !gameState.paused;
-            if (gameState.paused) {
-              scene.showOverlay();
-            } else {
-              scene.hideOverlay();
-            }
+            if (gameState.paused) scene.showOverlay();
+            else scene.hideOverlay();
           }
         });
       }
 
-      setupLighting() {
-        // Dark overlay for Diablo-style darkness
-        this.darkOverlay = this.add.graphics();
-        this.darkOverlay.setDepth(50);
-        this.updateDarkness();
+      setupScreenFX() {
+        this.fxBlood = document.getElementById('fx-blood');
+        this.fxFlash = document.getElementById('fx-flash');
+        this.fxBanner = document.getElementById('fx-banner');
+        this.fxImpact = document.getElementById('fx-impact');
+        this.fxHurt = 0;
+        this.hitstop = 0;
+        this.transitioning = false;
+        this.ending = false;
+        this.woundedWarned = false;
+        this.installPostFX();
       }
 
-      updateDarkness() {
-        if (!this.darkOverlay || !this.player) return;
+      installPostFX() {
+        const cam = this.cameras.main;
+        if (!cam.postFX) return;
+        try {
+          cam.postFX.addBloom(0xffaa66, 1, 1, 0.6, 0.28, 2);
+        } catch (err) {
+          // Canvas fallback has no post pipelines.
+        }
+      }
 
-        this.darkOverlay.clear();
+      impact(amount, duration, color, flashMs) {
+        this.cameras.main.shake(duration, amount);
+        if (color) this.flashScreen(color, flashMs || duration);
+      }
 
-        // Create darkness gradient
-        const w = this.cameras.main.width;
-        const h = this.cameras.main.height;
-        const camX = this.cameras.main.scrollX;
-        const camY = this.cameras.main.scrollY;
+      hitStop(ms) {
+        this.hitstop = Math.max(this.hitstop || 0, ms);
+      }
 
-        // Vignette effect
-        this.darkOverlay.fillStyle(0x000000, 0);
-        this.darkOverlay.fillRect(camX, camY, w, h);
+      flashScreen(color, ms) {
+        const el = this.fxFlash;
+        if (!el) return;
+        el.style.transition = 'none';
+        el.style.background = color;
+        el.style.opacity = '1';
+        requestAnimationFrame(() => {
+          el.style.transition = 'opacity ' + ms + 'ms linear';
+          el.style.opacity = '0';
+        });
+      }
 
-        // Add edge darkness
-        const edgeGrad = this.darkOverlay;
-        edgeGrad.fillStyle(0x000000, 0.7);
-        edgeGrad.fillRect(camX, camY, w, 30);
-        edgeGrad.fillRect(camX, camY + h - 30, w, 30);
-        edgeGrad.fillRect(camX, camY, 30, h);
-        edgeGrad.fillRect(camX + w - 30, camY, 30, h);
+      showBanner(text, kind) {
+        const el = this.fxBanner;
+        if (!el) return;
+        el.textContent = text;
+        el.className = kind || '';
+        void el.offsetWidth;
+        el.classList.add('show');
+      }
+
+      triggerImpactLines() {
+        const el = this.fxImpact;
+        if (!el) return;
+        el.classList.remove('go');
+        void el.offsetWidth;
+        el.classList.add('go');
+      }
+
+      shakeHud() {
+        const hud = document.getElementById('hud');
+        if (!hud) return;
+        hud.classList.remove('shake');
+        void hud.offsetWidth;
+        hud.classList.add('shake');
+      }
+
+      spawnShockwave(x, y, color, scale) {
+        const ring = this.add.circle(x, y, 14, color, 0).setDepth(14);
+        ring.setStrokeStyle(4, color, 0.95);
+        this.tweens.add({
+          targets: ring,
+          scale: scale,
+          alpha: 0,
+          duration: 260,
+          ease: 'Cubic.easeOut',
+          onComplete: () => ring.destroy()
+        });
+      }
+
+      flareTorches() {
+        for (const t of this.torches) {
+          if (!t.light) continue;
+          t.light.intensity = 1.35;
+          t.light.radius = 210;
+          this.tweens.add({
+            targets: t.light,
+            intensity: 0.6,
+            radius: 120,
+            duration: 900,
+            ease: 'Quad.easeOut'
+          });
+        }
+      }
+
+      updateScreenFX(time, delta) {
+        const p = this.player;
+        this.fxHurt = Math.max(0, (this.fxHurt || 0) - delta / 650);
+        let blood = this.fxHurt;
+        if (p && p.hp > 0 && p.hp / p.maxHp <= 0.3) {
+          const pulse = 0.4 + Math.sin(time / 130) * 0.22;
+          blood = Math.max(blood, pulse);
+        }
+        if (this.fxBlood) this.fxBlood.style.opacity = Math.max(0, Math.min(0.92, blood)).toFixed(3);
+      }
+
+      setupLighting() {
+        // Darkness is the DOM vignette. World lights stay on the Phaser camera.
       }
 
       setupParticles() {
@@ -1046,8 +1222,10 @@
       }
 
       update(time, delta) {
-        if (gameState.paused || gameState.gameOver) {
-          this.handlePauseInput();
+        this.updateScreenFX(time, delta);
+        if (gameState.paused || gameState.gameOver || this.transitioning) return;
+        if (this.hitstop > 0) {
+          this.hitstop -= delta;
           return;
         }
 
@@ -1055,18 +1233,7 @@
         this.updateEnemies(delta);
         this.updateProjectiles(delta);
         this.updatePickups();
-        this.updateDarkness();
         this.updateMinimap();
-      }
-
-      handlePauseInput() {
-        if (Phaser.Input.Keyboard.JustDown(this.keys.p) && !gameState.gameOver) {
-          gameState.paused = !gameState.paused;
-          this.showOverlay();
-        }
-        if (Phaser.Input.Keyboard.JustDown(this.keys.r)) {
-          this.restartGame();
-        }
       }
 
       updatePlayer(delta) {
@@ -1129,17 +1296,6 @@
           this.useHeal();
         }
 
-        // Pause
-        if (Phaser.Input.Keyboard.JustDown(this.keys.p)) {
-          gameState.paused = true;
-          this.showOverlay();
-        }
-
-        // Restart
-        if (Phaser.Input.Keyboard.JustDown(this.keys.r)) {
-          this.restartGame();
-        }
-
         // Check stairs
         this.checkStairs();
 
@@ -1153,35 +1309,49 @@
         p.isAttacking = true;
         this.sfxSwing();
 
-        // Slash effect
+        const ghost = this.add.sprite(p.x, p.y, 'player_3').setDepth(9).setAlpha(0.4);
+        ghost.setFlipX(p.facing.x < 0);
+        ghost.setTint(0xffe2b0);
+        this.tweens.add({
+          targets: ghost,
+          alpha: 0,
+          x: p.x - p.facing.x * 14,
+          y: p.y - p.facing.y * 14,
+          duration: 140,
+          onComplete: () => ghost.destroy()
+        });
+
         const slashX = p.x + p.facing.x * 35;
         const slashY = p.y + p.facing.y * 35;
-        const slash = this.add.arc(slashX, slashY, 30, 
-          Phaser.Math.RadToDeg(Math.atan2(p.facing.y, p.facing.x)) - 45,
-          Phaser.Math.RadToDeg(Math.atan2(p.facing.y, p.facing.x)) + 45,
-          false, 0xffffff, 0.8
-        ).setDepth(15);
-        slash.setStrokeStyle(4, 0xa0a0a0, 1);
-        slash.isFilled = false;
-
+        const ang = Phaser.Math.RadToDeg(Math.atan2(p.facing.y, p.facing.x));
+        const slash = this.add.arc(slashX, slashY, 30, ang - 50, ang + 50, false, 0xffffff, 0.15).setDepth(15);
+        slash.setStrokeStyle(5, 0xf4f0e6, 1);
         this.tweens.add({
           targets: slash,
           alpha: 0,
-          scale: 1.5,
-          duration: 150,
+          scale: 1.65,
+          duration: 160,
           onComplete: () => slash.destroy()
         });
 
-        // Hit enemies
+        let hits = 0;
         for (const e of this.enemies) {
           if (e.hp <= 0) continue;
           const dist = Phaser.Math.Distance.Between(p.x, p.y, e.x, e.y);
           if (dist <= PLAYER_ATK_RANGE) {
             this.damageEnemy(e, PLAYER_ATK);
+            this.spawnShockwave(e.x, e.y, 0xd8d0c4, 2.4);
+            hits++;
           }
         }
 
-        // Reset attack animation
+        if (hits > 0) {
+          this.impact(0.004 + Math.min(hits, 3) * 0.0015, 90, 'radial-gradient(circle, rgba(255,244,220,0.2) 0%, transparent 55%)', 100);
+          this.hitStop(40 + hits * 18);
+        } else {
+          this.impact(0.0016, 40);
+        }
+
         this.time.delayedCall(200, () => {
           p.isAttacking = false;
         });
@@ -1193,6 +1363,8 @@
 
         p.fireballCd = FIREBALL_CD;
         this.sfxFireball();
+        this.impact(0.003, 70, 'radial-gradient(circle, rgba(255,160,50,0.28) 0%, transparent 62%)', 120);
+        this.spawnShockwave(p.x + p.facing.x * 18, p.y + p.facing.y * 18, 0xff7722, 2.2);
 
         const sprite = this.add.sprite(p.x, p.y, 'fireball_0').setDepth(11);
         const proj = {
@@ -1222,9 +1394,11 @@
         p.hp += healAmt;
         this.sfxHeal();
 
-        // Heal particles
         this.healEmitter.setPosition(p.x, p.y);
         this.healEmitter.explode(20);
+        this.flashScreen('rgba(70,220,110,0.32)', 280);
+        this.fxHurt = Math.max(0, this.fxHurt - 0.35);
+        this.spawnShockwave(p.x, p.y, 0x44ff88, 4.5);
 
         // Heal ring effect
         const ring = this.add.circle(p.x, p.y, 10, 0x44ff44, 0).setDepth(15);
@@ -1258,7 +1432,9 @@
 
         // Flash red
         enemy.sprite.setTint(0xff0000);
-        this.time.delayedCall(100, () => enemy.sprite.clearTint());
+        this.time.delayedCall(100, () => {
+          if (enemy.sprite && enemy.sprite.active) enemy.sprite.clearTint();
+        });
 
         if (enemy.hp <= 0) {
           this.killEnemy(enemy);
@@ -1278,14 +1454,11 @@
         this.showDamageText(enemy.x, enemy.y - 10, '+' + goldDrop, 0xc9a227);
 
         if (enemy.isBoss) {
-          this.sfxBossDeath();
-          gameState.victory = true;
-          gameState.gameOver = true;
-          gameState.status = "VICTORY";
-          this.sfxVictory();
-          this.showOverlay();
+          this.beginVictory();
         } else {
           this.sfxDeath();
+          this.spawnShockwave(enemy.x, enemy.y, 0x7a1515, 2.8);
+          this.impact(0.005, 110, 'rgba(90,0,0,0.2)', 100);
         }
 
         // Cleanup
@@ -1298,30 +1471,99 @@
         this.updateHUD();
       }
 
-      damagePlayer(dmg) {
+      damagePlayer(dmg, fromX, fromY, heavy) {
+        if (this.ending) return;
         const p = this.player;
         p.hp -= dmg;
         this.sfxHit();
 
-        // Blood particles
         this.bloodEmitter.setPosition(p.x, p.y);
-        this.bloodEmitter.explode(10);
+        this.bloodEmitter.explode(heavy ? 18 : 10);
 
-        // Damage text
         this.showDamageText(p.x, p.y - 30, '-' + dmg, 0xc41e1e);
 
-        // Flash screen red
-        this.cameras.main.flash(100, 100, 20, 20);
+        this.fxHurt = Math.min(0.95, (this.fxHurt || 0) + (heavy ? 0.7 : 0.48));
+        if (this.fxBlood) this.fxBlood.style.opacity = Math.min(0.92, this.fxHurt).toFixed(3);
+        const hurtWash = heavy
+          ? 'radial-gradient(circle, rgba(90,0,0,0.18) 20%, rgba(150,0,0,0.78) 100%)'
+          : 'radial-gradient(circle, transparent 28%, rgba(130,0,0,0.62) 100%)';
+        this.impact(heavy ? 0.016 : 0.008, heavy ? 240 : 150, hurtWash, heavy ? 220 : 140);
+        this.hitStop(heavy ? 130 : 75);
+        this.shakeHud();
+        p.sprite.setTint(0xff6666);
+        this.time.delayedCall(90, () => {
+          if (p.sprite && p.sprite.active) p.sprite.clearTint();
+        });
+
+        if (fromX != null && fromY != null) {
+          const dx = p.x - fromX;
+          const dy = p.y - fromY;
+          const len = Math.hypot(dx, dy) || 1;
+          const knock = heavy ? 22 : 12;
+          const kx = p.x + (dx / len) * knock;
+          const ky = p.y + (dy / len) * knock;
+          if (this.canMove(kx, p.y, heavy ? 20 : 16)) p.x = kx;
+          if (this.canMove(p.x, ky, heavy ? 20 : 16)) p.y = ky;
+          p.sprite.setPosition(p.x, p.y);
+          if (this.playerLight) this.playerLight.setPosition(p.x, p.y - 10);
+        }
+
+        if (p.hp > 0 && p.hp / p.maxHp <= 0.3 && !this.woundedWarned) {
+          this.woundedWarned = true;
+          this.showBanner('WOUNDED', 'danger');
+        }
 
         if (p.hp <= 0) {
           p.hp = 0;
-          gameState.gameOver = true;
-          gameState.status = "YOU HAVE DIED";
-          this.sfxDefeat();
-          this.showOverlay();
+          this.beginDefeat();
         }
 
         this.updateHUD();
+      }
+
+      beginDefeat() {
+        if (this.ending) return;
+        this.ending = true;
+        this.transitioning = true;
+        gameState.status = 'YOU HAVE DIED';
+        this.sfxDefeat();
+        this.showBanner('YOU DIED', 'danger');
+        this.triggerImpactLines();
+        this.impact(0.02, 520, 'radial-gradient(circle, rgba(80,0,0,0.2) 10%, rgba(140,0,0,0.88) 100%)', 480);
+        this.cameras.main.flash(420, 160, 0, 0);
+        this.updateHUD();
+        const token = this.fxToken || 0;
+        this.time.delayedCall(700, () => {
+          if (token !== (this.fxToken || 0)) return;
+          gameState.gameOver = true;
+          this.showOverlay();
+          this.transitioning = false;
+          this.ending = false;
+        });
+      }
+
+      beginVictory() {
+        if (this.ending) return;
+        this.ending = true;
+        this.transitioning = true;
+        gameState.status = 'VICTORY';
+        this.sfxBossDeath();
+        this.sfxVictory();
+        this.showBanner('VICTORY', 'gold');
+        this.triggerImpactLines();
+        this.impact(0.024, 680, 'radial-gradient(circle, rgba(255,220,120,0.28) 0%, rgba(120,80,0,0.45) 100%)', 420);
+        this.cameras.main.flash(300, 255, 214, 120);
+        this.flareTorches();
+        this.updateHUD();
+        const token = this.fxToken || 0;
+        this.time.delayedCall(760, () => {
+          if (token !== (this.fxToken || 0)) return;
+          gameState.victory = true;
+          gameState.gameOver = true;
+          this.showOverlay();
+          this.transitioning = false;
+          this.ending = false;
+        });
       }
 
       showDamageText(x, y, text, color) {
@@ -1371,7 +1613,7 @@
             e.attackCd = ENEMY_ATK_CD;
             const texKey = e.isBoss ? 'boss_3' : 'demon_3';
             e.sprite.setTexture(texKey);
-            this.damagePlayer(e.dmg);
+            this.damagePlayer(e.dmg, e.x, e.y, e.isBoss);
           }
 
           e.sprite.setPosition(e.x, e.y);
@@ -1402,38 +1644,45 @@
 
           // Check wall collision
           if (this.tileAt(proj.x, proj.y) === this.CELL_WALL) {
-            this.destroyProjectile(proj);
+            this.destroyProjectile(proj, true);
             continue;
           }
 
-          // Check enemy collision
+          let hit = false;
           for (const e of this.enemies) {
             if (e.hp <= 0) continue;
             const dist = Phaser.Math.Distance.Between(proj.x, proj.y, e.x, e.y);
             const hitRadius = e.isBoss ? 40 : 24;
             if (dist < hitRadius) {
               this.damageEnemy(e, proj.dmg);
-              this.destroyProjectile(proj);
+              this.destroyProjectile(proj, true);
+              hit = true;
               break;
             }
           }
+          if (hit) continue;
 
           if (proj.ttl <= 0) {
-            this.destroyProjectile(proj);
+            this.destroyProjectile(proj, false);
           }
         }
 
         this.projectiles = this.projectiles.filter(p => p.ttl > 0);
       }
 
-      destroyProjectile(proj) {
-        // Explosion effect
+      destroyProjectile(proj, heavy) {
+        if (proj.dead) return;
+        proj.dead = true;
+        proj.ttl = 0;
+
         this.fireEmitter.setPosition(proj.x, proj.y);
-        this.fireEmitter.explode(15);
+        this.fireEmitter.explode(heavy ? 22 : 10);
+        this.spawnShockwave(proj.x, proj.y, 0xff6622, heavy ? 3.6 : 1.8);
+        this.impact(heavy ? 0.008 : 0.003, heavy ? 140 : 70, 'rgba(255,120,40,0.3)', heavy ? 130 : 70);
+        if (heavy) this.hitStop(55);
 
         proj.sprite.destroy();
         proj.light.destroy();
-        proj.ttl = 0;
       }
 
       updatePickups() {
@@ -1446,10 +1695,13 @@
             if (pk.type === 'gold') {
               gameState.gold += pk.value;
               this.showDamageText(pk.x, pk.y - 10, '+' + pk.value, 0xc9a227);
+              this.flashScreen('rgba(220,180,60,0.22)', 160);
             } else {
               const heal = Math.min(pk.value, p.maxHp - p.hp);
               p.hp += heal;
               this.showDamageText(pk.x, pk.y - 10, '+' + heal, 0x44ff44);
+              this.flashScreen('rgba(70,220,110,0.28)', 200);
+              this.fxHurt = Math.max(0, this.fxHurt - 0.25);
             }
             this.sfxPickup();
             pk.sprite.destroy();
@@ -1469,13 +1721,39 @@
           if (gameState.floor >= MAX_FLOOR && bossAlive) {
             gameState.status = "DEFEAT THE BOSS";
           } else if (gameState.floor < MAX_FLOOR) {
-            this.sfxStairs();
-            gameState.floor++;
-            this.generateFloor(gameState.floor);
-            this.setupPlayer();
-            this.setupCamera();
+            this.descendFloor();
           }
         }
+      }
+
+      descendFloor() {
+        if (this.transitioning || this.ending) return;
+        this.transitioning = true;
+        this.sfxStairs();
+        this.impact(0.01, 260, 'rgba(0,0,0,0.35)', 220);
+        this.showBanner('DESCENDING');
+        this.cameras.main.fadeOut(280, 6, 4, 2);
+        const token = this.fxToken || 0;
+        this.time.delayedCall(300, () => {
+          if (token !== (this.fxToken || 0)) return;
+          gameState.floor++;
+          this.generateFloor(gameState.floor);
+          this.setupPlayer();
+          this.setupCamera();
+          this.cameras.main.fadeIn(420, 6, 4, 2);
+          if (gameState.floor >= MAX_FLOOR) {
+            this.showBanner('THE DEMON LORD', 'danger');
+            this.triggerImpactLines();
+            this.impact(0.018, 520, 'rgba(120,0,0,0.4)', 360);
+            this.flareTorches();
+          } else {
+            this.showBanner('FLOOR ' + gameState.floor);
+          }
+          this.time.delayedCall(460, () => {
+            if (token !== (this.fxToken || 0)) return;
+            this.transitioning = false;
+          });
+        });
       }
 
       canMove(x, y, radius = 16) {
@@ -1506,6 +1784,7 @@
         hudHp.textContent = Math.max(0, Math.floor(p.hp));
         hudHpMax.textContent = p.maxHp;
         hudHpBar.style.width = Math.max(0, (p.hp / p.maxHp) * 100) + '%';
+        hudHpBar.classList.toggle('critical', p.hp > 0 && p.hp / p.maxHp <= 0.3);
         hudGold.textContent = gameState.gold;
         hudKills.textContent = gameState.kills;
         hudStatus.textContent = gameState.status;
@@ -1596,6 +1875,8 @@
             fontFamily: 'Press Start 2P',
             color: color
           }).setOrigin(0.5).setDepth(201);
+          this.overlayText.setScale(1.5);
+          this.tweens.add({ targets: this.overlayText, scale: 1, duration: 260, ease: 'Back.easeOut' });
 
           const stats = `FLOOR ${gameState.floor}  KILLS ${gameState.kills}  GOLD ${gameState.gold}`;
           this.overlaySubtext = this.add.text(cx, cy + 20, stats + '\n\nPRESS R TO RESTART', {
@@ -1626,7 +1907,17 @@
       }
 
       restartGame() {
+        if (this.restarting) return;
+        this.restarting = true;
+        this.fxToken = (this.fxToken || 0) + 1;
         this.hideOverlay();
+        this.hitstop = 0;
+        this.transitioning = false;
+        this.ending = false;
+        this.fxHurt = 0;
+        this.woundedWarned = false;
+        if (this.fxBlood) this.fxBlood.style.opacity = '0';
+        if (this.fxFlash) this.fxFlash.style.opacity = '0';
         gameState = {
           floor: 1,
           kills: 0,
@@ -1647,9 +1938,13 @@
           this.playerLight = null;
         }
 
+        if (this.cameras.main.resetFX) this.cameras.main.resetFX();
         this.generateFloor(1);
         this.setupPlayer();
         this.setupCamera();
+        this.cameras.main.fadeIn(420, 0, 0, 0);
+        this.showBanner('BLOOD CRYPT');
+        this.restarting = false;
       }
     }
 
